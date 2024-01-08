@@ -176,7 +176,7 @@ class SteamCardCompact extends LitElement {
       <div class="single-card-container clickable" @click=${() => this.handlePopup(entity)}>
         <div class="steam-avatar-container">
           ${this.renderUserAvatar(entity, `steam-avatar single ${this.getState(entity, 'unknown')}`)}
-          <div class="steam-level single">
+          <div class="steam-level single ${entity.state}">
             <span class="steam-level-text-container single">
               <span class="steam-level-text single">${this.getAttr(entity, 'level', '?')}</span>
             </span>
@@ -187,9 +187,9 @@ class SteamCardCompact extends LitElement {
           <div class="steam-username ${entity.state}">${entity.attributes.friendly_name}</div>
           <div class="steam-last-online ${entity.state}">
             <span>
-              <ha-icon icon="mdi:cloud-${entity.state === 'online' ? 'check' : (isNaN(parseInt(entity.state)) ? 'question' : 'remove')}-outline"></ha-icon>
+              <ha-icon class="online-status-icon ${entity.state}" icon="mdi:cloud-${entity.state === 'online' ? 'check' : (entity.state === 'unknown' ? 'question' : 'remove')}-outline"></ha-icon>
             </span>
-            <span class="steam-last-online-text">${this.formatLastOnline(entity.attributes.last_online)}</span>
+            <span class="steam-last-online-text ${entity.state}">${this.formatLastOnline(entity.attributes.last_online)}</span>
           </div>
         </div>
         ${this.config.game_background ? (entity.attributes.game 
@@ -225,10 +225,10 @@ class SteamCardCompact extends LitElement {
     if (isNaN(parseInt(lastOnline))) return '';
 
     const seconds = (new Date().getTime() - new Date(lastOnline).getTime()) / 1000;
-    return seconds < 60 ? `${seconds} sec` :
+    return seconds < 60 ? '< 1 min' :
       seconds < 3600 ? `${Math.floor(seconds/60)} min` :
       seconds < 86400 ? `${Math.floor(seconds/60/60)} h` :
-      seconds < 86400 ? `${Math.floor(seconds/60/60/24)} ${this.translation("ui.components.calendar.event.repeat.interval.daily", "days")}` :
+      seconds < 604800 ? `${Math.floor(seconds/60/60/24)} ${this.translation("ui.components.calendar.event.repeat.interval.daily", "days")}` :
       `${Math.floor(seconds/60/60/24/7)} ${this.translation("ui.components.calendar.event.repeat.interval.weekly", "weeks")}`;
   }
 
@@ -240,8 +240,8 @@ class SteamCardCompact extends LitElement {
 
   renderUserAvatar(entity, class_name): TemplateResult {
     return entity.attributes.entity_picture
-      ? html` <img src="${entity.attributes.entity_picture.replace('_medium', '_full')}" class="${class_name}" /> `
-      : html` <ha-icon icon="${entity.attributes.icon}" class="${class_name}"></ha-icon> `;
+      ? html`<img src="${entity.attributes.entity_picture.replace('_medium', '_full')}" class="${class_name}" />`
+      : html`<div class="${class_name}"></div>`;
   }
 
   static get styles(): CSSResult {
@@ -316,18 +316,24 @@ class SteamCardCompact extends LitElement {
       }
 
       .steam-avatar {
-        width: 40px;
-        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        max-width: 36px;
+        max-height: 36px;
         border-style: solid;
         border-width: 1px 1px 4px 1px;
         object-fit: cover;
         margin-bottom: 3px;
+        display: block;
       }
 
       .steam-avatar.single {
-        width: 50px;
-        height: 50px;
+        min-width: 50px;
+        min-height: 50px;
+        max-width: 50px;
+        max-height: 50px;
         border-width: 1px 1px 5px 1px;
+        display: block;
       }
 
       .steam-avatar.online {
@@ -359,7 +365,7 @@ class SteamCardCompact extends LitElement {
         overflow: hidden;
       }
 
-      .steam-username.offline, .steam-value.offline {
+      .steam-username.offline, .steam-value.offline, .steam-level.single.offline, .steam-last-online-text.offline, .online-status-icon.offline {
         opacity: 0.5;
       }
 
@@ -374,6 +380,9 @@ class SteamCardCompact extends LitElement {
       .user-container {
         margin-left: 0.5em;
         width: 100%;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .user-data-container.single {
@@ -411,6 +420,9 @@ class SteamCardCompact extends LitElement {
 
       .steam-last-online-text {
         margin-left: 5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .steam-multi {
@@ -426,7 +438,7 @@ class SteamCardCompact extends LitElement {
         margin-right: 3px;
       }
 
-      .steam-multi:last-child {
+      .steam-multi:nth-child(2) {
         margin-left: 3px;
       }
 
