@@ -23,7 +23,7 @@ Hey dude! Help me out for a couple of :beers: or a :coffee:!
 | Name                       | Type    | Requirement  | Description                                             | Default             |
 | -------------------------- | ------- | ------------ | ------------------------------------------------------- | ------------------- |
 | type                       | string  | **Required** | `custom:steam-card-compact`                             |                     |
-| entity                     | string    **Optional** | Target entity. Either this or entities must be defined. |                     |
+| entity                     | string  | **Optional** | Target entity. Either this or entities must be defined. |                     |
 | entities                   | string[]| **Optional** | Target entities                                         |                     |
 | title                      | string  | **Optional** | Title shown on top of card                              | 'Steam Friends'     |
 | game_background            | boolean | **Optional** | Show game header picture as background                  | `false`             |
