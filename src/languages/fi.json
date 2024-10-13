@@ -1,0 +1,24 @@
+{
+  "common": {
+    "version": "Versio",
+    "invalid_configuration": "Virheellinen konfiguraatio",
+    "description": "Kompakti kortti Steam-integraation tietojen näyttämiseksi",
+    "name": "Steam card compact",
+    "last_seen": "Nähty {amount} {unit} sitten",
+    "in_state": "{state} viimeiset {amount} {unit}",
+    "entity_not_found": "Entiteettiä {entity} ei löydetty."
+  },
+  "statuses": {
+    "online": "Paikalla",
+    "away": "Poissa",
+    "snooze": "Toimeton",
+    "offline": "Offline-tilassa",
+    "unavailable": "Ei saatavilla"
+  },
+  "time_units": {
+    "minutes": "min",
+    "hours": "h",
+    "days": "pv",
+    "weeks": "vko"
+  }
+}

@@ -20,13 +20,54 @@ Hey dude! Help me out for a couple of :beers: or a :coffee:!
 
 ## Options
 
-| Name                       | Type    | Requirement  | Description                                             | Default             |
-| -------------------------- | ------- | ------------ | ------------------------------------------------------- | ------------------- |
-| type                       | string  | **Required** | `custom:steam-card-compact`                             |                     |
-| entity                     | string  | **Optional** | Target entity. Either this or entities must be defined. |                     |
-| entities                   | string[]| **Optional** | Target entities                                         |                     |
-| title                      | string  | **Optional** | Title shown on top of card                              | 'Steam Friends'     |
-| game_background            | boolean | **Optional** | Show game header picture as background                  | `false`             |
+| Name                       | Type     | Requirement  | Description                                             | Default             |
+| -------------------------- | -------- | ------------ | ------------------------------------------------------- | ------------------- |
+| type                       | string   | **Required** | `custom:steam-card-compact`                             |                     |
+| entity                     | string[] | **Optional** | Target entities. If only one entity ID is given and auto populate is not enabled, single entity card is rendered instead of the list card. |                     |
+| title                      | string   | **Optional** | Title shown on top of card                              | 'Steam Friends'     |
+| game_background            | boolean  | **Optional** | Show game header picture as background                  | `true`              |
+| auto_populate              | boolean  | **Optional** | If enabled, all sensor.steam_XXXXX entities will be rendered on a list. |               |
+| name_overrides             | custom[] | **Optional** | If you want to override the friendly name of some steam users, you can do it with this. |               |
+
+### Format for custom name configs
+
+| Name                     | Type     | Requirement  | Description                                        | Default             |
+| ------------------------ | -------- | ------------ | ---------------------------------------------------| ------------------- |
+| entity                   | string   | **Required** | The entity to override                             |                     |
+| name                     | string   | **Required** | Name shown for this Steam user                     |                     |
+
+### Example configurations
+
+
+List card for multiple Steam users
+```
+type: custom:steam-card-compact
+entity:
+  - sensor.steam_abc
+  - sensor.steam_def
+  - sensor.steam_ghi
+  - sensor.steam_jkl
+  - sensor.steam_mno
+title: Steam buddies
+name_overrides:
+  - entity: sensor.steam_abc
+    name: ABC-MAN
+  - entity: sensor.steam_jkl
+    name: Testing
+```
+
+Big card for single Steam user
+```
+type: custom:steam-card-compact
+entity:
+  - sensor.steam_abc
+```
+
+List card with all Steam users
+```
+type: custom:steam-card-compact
+auto_populate: true
+```
 
 ## How to install
 

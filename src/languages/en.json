@@ -1,0 +1,24 @@
+{
+  "common": {
+    "version": "Version",
+    "invalid_configuration": "Invalid configuration",
+    "description": "A compact card to show Steam integrations",
+    "name": "Steam card compact",
+    "last_seen": "Last seen {amount} {unit} ago",
+    "in_state": "{state} for {amount} {unit}",
+    "entity_not_found": "Entity not found."
+  },
+  "statuses": {
+    "online": "Online",
+    "away": "Away",
+    "snooze": "Snoozing",
+    "offline": "Offline",
+    "unavailable": "Unavailable"
+  },
+  "time_units": {
+    "minutes": "min",
+    "hours": "h",
+    "days": "days",
+    "weeks": "weeks"
+  }
+}
