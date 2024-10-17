@@ -71,6 +71,12 @@ auto_populate: true
 
 ## How to install
 
+### With HACS
+
+1. Add this repository to HACS custom repositories
+2. Search for Steam Card Compact in HACS and install with type Lovelace
+3. Refresh your browser
+
 ### Manually
 
 1. Download steam-card-compact.js from latest release and copy it to config/www folder on your Home Assistant installation.
