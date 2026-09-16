@@ -6,7 +6,7 @@
     "name": "Steam card compact",
     "last_seen": "Last seen {amount} {unit} ago",
     "in_state": "{state} for {amount} {unit}",
-    "entity_not_found": "Entity not found."
+    "entity_not_found": "Entity {entity} was not found."
   },
   "statuses": {
     "online": "Online",
@@ -19,6 +19,7 @@
     "minutes": "min",
     "hours": "h",
     "days": "days",
-    "weeks": "weeks"
+    "weeks": "weeks",
+    "seconds": "s"
   }
 }

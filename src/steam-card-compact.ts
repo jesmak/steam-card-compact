@@ -1,339 +1,251 @@
-import { html, css, LitElement, CSSResult, TemplateResult, PropertyDeclarations } from 'lit-element';
-import { customElement, property, state } from 'lit-element/decorators.js';
+/**
+ * A dashboard card for Home Assistant's Steam integration: who is online, what
+ * they are playing, and how long ago the rest were last seen. Several players
+ * are listed two to a row; a single player gets a bigger card of their own.
+ */
+import { LitElement, css, html, nothing } from 'lit';
+import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 
-import * as packageDetails from '../package.json';
-import { HomeAssistant } from 'custom-card-helpers';
-import { SteamCardCompactConfig } from './types';
-import { localize } from './localize';
-import { HassEntity } from 'home-assistant-js-websocket';
-
-declare global {
-  interface Window {
-    customCards: {
-      type: string;
-      name: string;
-      description: string;
-    }[];
-  }
-}
+import { CARD_VERSION, STATUSES, STEAM_PREFIX } from './const';
+import { avatarUrl, displayName, elapsed, groupByStatus, pairs, sortByName } from './friends';
+import type { HassEntity, HomeAssistant } from './hass';
+import { browserLanguage, translate } from './localize';
+import { STEAM_LOGO } from './logo';
+import type { SteamCardCompactConfig } from './types';
 
 console.info(
-  `%c  STEAM-CARD-COMPACT \n%c  ${packageDetails.version}   `,
+  `%c  STEAM-CARD-COMPACT \n%c  ${CARD_VERSION}   `,
   'color: orange; font-weight: bold; background: black',
   'color: white; font-weight: bold; background: dimgray',
 );
 
-window.customCards = window.customCards || [];
-window.customCards.push({
+interface CardRegistration {
+  type: string;
+  name: string;
+  description: string;
+  documentationURL?: string;
+  preview?: boolean;
+}
+
+const registry = window as unknown as { customCards?: CardRegistration[] };
+registry.customCards = registry.customCards ?? [];
+registry.customCards.push({
   type: 'steam-card-compact',
-  name: localize('common.name'),
-  description: localize('common.description'),
+  name: translate(browserLanguage(), 'common.name'),
+  description: translate(browserLanguage(), 'common.description'),
+  documentationURL: 'https://github.com/jesmak/steam-card-compact',
+  preview: true,
 });
 
 @customElement('steam-card-compact')
 export class SteamCardCompact extends LitElement {
-  public static getStubConfig(): Record<string, unknown> {
-    return {};
-  }
+  @property({ attribute: false }) public hass?: HomeAssistant;
+  @state() private config?: SteamCardCompactConfig;
 
-  @property() public hass!: HomeAssistant;
-  @state() private config!: SteamCardCompactConfig;
-
-  static get properties(): PropertyDeclarations {
-    return {
-      hass: {},
-      config: {},
-    };
+  /** Offers every Steam player there is when the card is added from the picker. */
+  public static getStubConfig(hass?: HomeAssistant): Record<string, unknown> {
+    const players = Object.keys(hass?.states ?? {}).filter((id) => id.startsWith(STEAM_PREFIX));
+    return players.length > 0 ? { entity: players } : { auto_populate: true };
   }
 
   public setConfig(config: SteamCardCompactConfig): void {
     if (!config || (config.auto_populate === undefined && config.entity === undefined)) {
-      throw new Error(localize('common.invalid_configuration'));
+      throw new Error(translate(browserLanguage(), 'common.invalid_configuration'));
+    }
+    this.config = { ...config };
+  }
+
+  public getCardSize(): number {
+    const shown = this.wanted().length;
+    return this.single() ? 2 : 1 + Math.ceil(shown / 2);
+  }
+
+  protected shouldUpdate(changed: PropertyValues): boolean {
+    if (changed.has('config') || !this.config) {
+      return true;
+    }
+    const previous = changed.get('hass') as HomeAssistant | undefined;
+    if (!previous || this.config.auto_populate) {
+      return true;
+    }
+    return this.wanted().some((id) => previous.states[id] !== this.hass?.states[id]);
+  }
+
+  /** The entity ids the card is meant to show. */
+  private wanted(): string[] {
+    if (!this.hass || !this.config) {
+      return [];
+    }
+    if (this.config.auto_populate) {
+      return Object.keys(this.hass.states).filter((id) => id.startsWith(STEAM_PREFIX));
+    }
+    const { entity } = this.config;
+    return entity === undefined ? [] : typeof entity === 'string' ? [entity] : entity;
+  }
+
+  /** One named player, and not the automatic list, means the big card. */
+  private single(): boolean {
+    return !this.config?.auto_populate && typeof this.config?.entity === 'string';
+  }
+
+  protected render(): TemplateResult | typeof nothing {
+    if (!this.hass || !this.config) {
+      return nothing;
     }
 
-    this.config = {
-      name: localize('common.name'),
-      ...config,
-    };
+    const wanted = this.wanted();
+    const players = wanted
+      .map((id) => this.hass?.states[id])
+      .filter((entity): entity is HassEntity => entity !== undefined);
+    const missing = wanted.filter((id) => this.hass?.states[id] === undefined);
+
+    if (this.single()) {
+      return html`<ha-card>
+        ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
+      </ha-card>`;
+    }
+
+    return html`<ha-card>${this.listCard(players, missing)}</ha-card>`;
   }
 
-  protected render(): TemplateResult {
-    const steamEntities = Object.keys(this.hass.states).filter((id) => id.startsWith('sensor.steam_'));
+  private listCard(players: HassEntity[], missing: string[]): TemplateResult[] {
+    const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
 
-    return html`
-      <ha-card>
-        ${this.config.auto_populate
-          ? this.createEntitiesCard(steamEntities.map((entity_id) => this.hass.states[entity_id]))
-          : typeof this.config.entity === 'string'
-            ? this.createEntityCard(this.hass.states[this.config.entity])
-            : this.createEntitiesCard(this.config.entity!.map((entity_id) => this.hass.states[entity_id]))}
-      </ha-card>
-    `;
-  }
-
-  protected getCardSize(): number {
-    return this.config.entities ? this.config.entities.length + 1 : 2;
-  }
-
-  _toggle(state): void {
-    this.hass.callService('homeassistant', 'toggle', {
-      entity_id: state.entity_id,
-    });
-  }
-
-  createEntitiesCard(entities: HassEntity[]): TemplateResult[] {
-    const groupByKey = (list: HassEntity[], key: string) => {
-      return list.reduce(
-        (previous: HassEntity, current: HassEntity) => ({
-          ...previous,
-          [current[key]]: (previous[current[key]] || []).concat(current),
-        }),
-        {} as HassEntity,
-      );
-    };
-
-    const splitToPairs = (entities: HassEntity[]) =>
-      entities?.reduce(function (result, _, index, array) {
-        if (index % 2 === 0) result.push(array.slice(index, index + 2));
-        return result;
-      }, [] as HassEntity[][]);
-
-    entities.sort((a: HassEntity, b: HassEntity) =>
-      (
-        (this.config.name_overrides &&
-          this.config.name_overrides.find((override) => override?.entity === a.entity_id)?.name) ||
-        a.attributes.friendly_name ||
-        ''
-      ).localeCompare(
-        (this.config.name_overrides &&
-          this.config.name_overrides.find((override) => override?.entity === b.entity_id)?.name) ||
-          b.attributes.friendly_name ||
-          '',
-      ),
-    );
-
-    const groups = groupByKey(entities, 'state');
-
-    const online = splitToPairs(groups['online']);
-    const away = splitToPairs(groups['away']);
-    const snooze = splitToPairs(groups['snooze']);
-    const offline = splitToPairs(groups['offline']);
-    const unavailable = splitToPairs(groups['unavailable']);
-
-    return [
-      html`<div class="card-header"><div class="name">${this.config.title || 'Steam Friends'}</div></div> `,
-      online && online.length ? html`<div class="status-category">${localize('statuses.online')}</div>` : html``,
-      ...(online?.map((pair) => this.createPairRow(pair)) || []),
-      away && away.length ? html`<div class="status-category">${localize('statuses.away')}</div>` : html``,
-      ...(away?.map((pair) => this.createPairRow(pair)) || []),
-      snooze && snooze.length ? html`<div class="status-category">${localize('statuses.snooze')}</div>` : html``,
-      ...(snooze?.map((pair) => this.createPairRow(pair)) || []),
-      offline && offline.length ? html`<div class="status-category">${localize('statuses.offline')}</div>` : html``,
-      ...(offline?.map((pair) => this.createPairRow(pair)) || []),
-      unavailable && unavailable.length
-        ? html`<div class="status-category">${localize('statuses.unavailable')}</div>`
-        : html``,
-      ...(unavailable?.map((pair) => this.createPairRow(pair)) || []),
+    const rows: TemplateResult[] = [
+      html`<div class="card-header"><div class="name">${this.config?.title || 'Steam Friends'}</div></div>`,
     ];
+    for (const status of STATUSES) {
+      const group = groups[status];
+      if (!group || group.length === 0) {
+        continue;
+      }
+      rows.push(html`<div class="status-category">${this.text(`statuses.${status}`)}</div>`);
+      rows.push(...pairs(group).map((pair) => this.pairRow(pair)));
+    }
+    rows.push(...missing.map((id) => this.notFound(id)));
+    return rows;
   }
 
-  createPairRow(pair: HassEntity[]) {
-    const entity1 = pair[0];
-    const entity2 = pair.length > 1 ? pair[1] : undefined;
-
-    return html`
-      <div class="user-row">
-        ${entity1
-          ? this.createPairItem(entity1)
-          : html`<div class="not-found">${localize('common.entity_not_found')}</div>`}
-        ${entity2
-          ? this.createPairItem(entity2)
-          : pair.length == 2
-            ? html`<div class="not-found">${localize('common.entity_not_found')}</div>`
-            : ''}
-      </div>
-    `;
+  private pairRow(pair: HassEntity[]): TemplateResult {
+    return html`<div class="user-row">${pair.map((entity) => this.listPlayer(entity))}</div>`;
   }
 
-  createPairItem(entity: HassEntity) {
-    const name = entity
-      ? (this.config.name_overrides &&
-          this.config.name_overrides.find((override) => override?.entity === entity.entity_id)?.name) ||
-        entity.attributes.friendly_name
-      : undefined;
-
+  private listPlayer(entity: HassEntity): TemplateResult {
+    const game = entity.attributes.game;
     return html`
-      <div class="steam-multi clickable ${entity.state}" @click=${() => this.handlePopup(entity)}>
+      <div class="steam-multi clickable ${entity.state}" @click=${() => this.openMoreInfo(entity)}>
         <div class="steam-user">
-          ${entity.state !== 'unavailable' ? this.renderUserAvatar(entity, `steam-avatar ${entity.state}`) : ''}
-          <div class="user-container ${entity.attributes.game ? '' : 'no-game'}">
-            <div class="steam-username ${entity.state}">${name}</div>
-            ${entity.attributes.game
-              ? html`<div class="steam-value ${entity.state}">${entity.attributes.game}</div>`
-              : ''}
-            ${entity.state == 'offline'
-              ? html`<div class="steam-last-online ${entity.state}">
-                  <span class="steam-last-online-text ${entity.state}"
-                    >${this.formatLastSeen(entity.attributes.last_online)}</span
-                  >
-                </div>`
-              : ''}
+          ${entity.state !== 'unavailable' ? this.avatar(entity, `steam-avatar ${entity.state}`) : nothing}
+          <div class="user-container ${game ? '' : 'no-game'}">
+            <div class="steam-username ${entity.state}">
+              ${displayName(entity, this.config?.name_overrides)}
+            </div>
+            ${game ? html`<div class="steam-value ${entity.state}">${game}</div>` : nothing}
+            ${
+              entity.state === 'offline'
+                ? html`<div class="steam-last-online ${entity.state}">
+                    <span class="steam-last-online-text ${entity.state}">${this.lastSeen(entity)}</span>
+                  </div>`
+                : nothing
+            }
           </div>
         </div>
-        ${entity.attributes.game && this.config.game_background !== false
-          ? html`<img src="${entity.attributes.game_image_header}" class="steam-game-bg" /> `
-          : ''}
+        ${
+          game && this.config?.game_background !== false
+            ? html`<img src="${String(entity.attributes.game_image_header ?? '')}" class="steam-game-bg" />`
+            : nothing
+        }
       </div>
     `;
   }
 
-  handlePopup(entity: HassEntity) {
-    const entityId = entity.entity_id;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const e: any = new Event('hass-more-info', { composed: true });
-    e.detail = { entityId };
-    this.dispatchEvent(e);
-  }
-
-  createEntityCard(entity: HassEntity): TemplateResult {
-    const name =
-      (this.config.name_overrides &&
-        this.config.name_overrides.find((override) => override?.entity === entity.entity_id)?.name) ||
-      entity.attributes.friendly_name;
-
+  private bigCard(entity: HassEntity): TemplateResult {
+    const game = entity.attributes.game;
     return html`
-      <div class="single-card-container clickable" @click=${() => this.handlePopup(entity)}>
-        <div class="steam-avatar-container ${this.getState(entity, 'unknown')}">
-          ${this.renderUserAvatar(entity, `steam-avatar single ${this.getState(entity, 'unknown')}`)}
-          <div class="steam-level single ${this.getState(entity, 'unknown')}">
+      <div class="single-card-container clickable" @click=${() => this.openMoreInfo(entity)}>
+        <div class="steam-avatar-container ${entity.state}">
+          ${this.avatar(entity, `steam-avatar single ${entity.state}`)}
+          <div class="steam-level single ${entity.state}">
             <span class="steam-level-text-container single">
-              <span class="steam-level-text single">${this.getAttr(entity, 'level', '?')}</span>
+              <span class="steam-level-text single">${entity.attributes.level ?? '?'}</span>
             </span>
             <ha-icon icon="mdi:shield"></ha-icon>
           </div>
         </div>
         <div class="user-data-container single">
-          <div class="steam-username ${entity.state}">${name}</div>
+          <div class="steam-username ${entity.state}">
+            ${displayName(entity, this.config?.name_overrides)}
+          </div>
           <div class="steam-last-online ${entity.state}">
-            <span class="steam-last-online-text ${entity.state}"
-              >${this.formatLastOnline(entity.attributes.last_online, entity.state)}</span
-            >
+            <span class="steam-last-online-text ${entity.state}">${this.inState(entity)}</span>
           </div>
         </div>
-        ${this.config.game_background
-          ? entity.attributes.game
-            ? html`<img src="${entity.attributes.game_image_header}" class="steam-game-bg single" />`
-            : html`<svg class="steam-game-default-bg single" version="1.0" viewBox="0 0 467 143">
-                <g id="g6" transform="translate(-66.97417,-43.726937)">
-                  <path
-                    class="st0"
-                    d="m 137.9,45.1 c -36.7,0 -66.8,28.3 -69.7,64.3 l 37.5,15.5 c 3.2,-2.2 7,-3.4 11.1,-3.4 0.4,0 0.7,0 1.1,0 l 16.7,-24.2 c 0,-0.1 0,-0.2 0,-0.3 0,-14.5 11.8,-26.4 26.4,-26.4 14.5,0 26.4,11.8 26.4,26.4 0,14.6 -11.8,26.4 -26.4,26.4 -0.2,0 -0.4,0 -0.6,0 l -23.8,17 c 0,0.3 0,0.6 0,0.9 0,10.9 -8.9,19.8 -19.8,19.8 -9.6,0 -17.6,-6.8 -19.4,-15.9 L 70.6,134.1 c 8.3,29.4 35.3,50.9 67.3,50.9 38.6,0 69.9,-31.3 69.9,-69.9 0,-38.7 -31.3,-70 -69.9,-70"
-                    id="path1"
-                  />
-                  <path
-                    class="st0"
-                    d="m 112,151.2 -8.6,-3.5 c 1.5,3.2 4.2,5.8 7.7,7.3 7.6,3.1 16.3,-0.4 19.4,-8 1.5,-3.7 1.5,-7.7 0,-11.4 -1.5,-3.7 -4.4,-6.5 -8,-8.1 -3.6,-1.5 -7.5,-1.5 -10.9,-0.2 l 8.9,3.7 c 5.6,2.3 8.2,8.7 5.9,14.3 -2.4,5.6 -8.8,8.3 -14.4,5.9"
-                    id="path2"
-                  />
-                  <path
-                    class="st0"
-                    d="m 178.5,97 c 0,-9.7 -7.9,-17.6 -17.6,-17.6 -9.7,0 -17.6,7.9 -17.6,17.6 0,9.7 7.9,17.6 17.6,17.6 9.7,0 17.6,-7.9 17.6,-17.6 m -30.7,0 c 0,-7.3 5.9,-13.2 13.2,-13.2 7.3,0 13.2,5.9 13.2,13.2 0,7.3 -5.9,13.2 -13.2,13.2 -7.3,0 -13.2,-5.9 -13.2,-13.2"
-                    id="path3"
-                  />
-                  <path
-                    class="st0"
-                    d="m 282.5,93 -4.7,8.2 c -3.6,-2.5 -8.5,-4 -12.8,-4 -4.9,0 -7.9,2 -7.9,5.6 0,4.4 5.4,5.4 13.3,8.3 8.6,3 13.5,6.6 13.5,14.4 0,10.7 -8.4,16.8 -20.6,16.8 -5.9,0 -13.1,-1.5 -18.5,-4.9 l 3.4,-9.1 c 4.5,2.4 9.8,3.7 14.5,3.7 6.4,0 9.5,-2.4 9.5,-5.9 0,-4 -4.6,-5.2 -12.1,-7.7 -8.5,-2.9 -14.5,-6.6 -14.5,-15.3 0,-9.8 7.8,-15.4 19.1,-15.4 7.9,0.1 14.3,2.6 17.8,5.3"
-                    id="path4"
-                  />
-                  <polygon
-                    class="st0"
-                    points="335.1,98.2 319.1,98.2 319.1,141.4 308.1,141.4 308.1,98.2 292.1,98.2 292.1,88.7 335.1,88.7 "
-                    id="polygon4"
-                  />
-                  <polygon
-                    class="st0"
-                    points="382.8,141.4 347.3,141.4 347.3,88.7 382.8,88.7 382.8,98.2 358.3,98.2 358.3,110 379.4,110 379.4,119.5 358.3,119.5 358.3,131.9 382.8,131.9 "
-                    id="polygon5"
-                  />
-                  <path
-                    class="st0"
-                    d="m 407.4,131.2 -3.5,10.2 h -11.6 l 19.8,-52.7 h 11.1 l 20.3,52.7 h -12 l -3.6,-10.2 z m 10.2,-29.9 -7.2,21.1 H 425 Z"
-                    id="path5"
-                  />
-                  <polygon
-                    class="st0"
-                    points="485.8,139.9 479.5,139.9 465.4,109.4 465.4,141.4 454.8,141.4 454.8,88.7 465.3,88.7 483,126.8 500.1,88.7 510.8,88.7 510.8,141.4 500.2,141.4 500.2,109.1 "
-                    id="polygon6"
-                  />
-                  <path
-                    class="st0"
-                    d="m 532.1,95.4 c 0,4.5 -3.4,7.3 -7.3,7.3 -3.9,0 -7.3,-2.8 -7.3,-7.3 0,-4.5 3.4,-7.3 7.3,-7.3 3.9,-0.1 7.3,2.7 7.3,7.3 m -13.4,0 c 0,3.8 2.7,6.2 6.1,6.2 3.3,0 6.1,-2.4 6.1,-6.2 0,-3.8 -2.7,-6.1 -6.1,-6.1 -3.3,-0.1 -6.1,2.3 -6.1,6.1 m 6.2,-3.8 c 1.9,0 2.5,1 2.5,2.1 0,1 -0.6,1.7 -1.3,2 l 1.7,3.2 h -1.4 L 525,96.1 h -1.5 v 2.8 h -1.2 v -7.2 h 2.6 z m -1.4,3.4 h 1.3 c 0.8,0 1.3,-0.5 1.3,-1.2 0,-0.7 -0.4,-1.1 -1.3,-1.1 h -1.3 z"
-                    id="path6"
-                  />
-                </g>
-              </svg>`
-          : ''}
-        ${entity.attributes.game ? html`<div class="steam-game">${entity.attributes.game}</div>` : ''}
+        ${
+          this.config?.game_background
+            ? game
+              ? html`<img
+                  src="${String(entity.attributes.game_image_header ?? '')}"
+                  class="steam-game-bg single"
+                />`
+              : STEAM_LOGO
+            : nothing
+        }
+        ${game ? html`<div class="steam-game">${game}</div>` : nothing}
       </div>
     `;
   }
 
-  getState(entity: HassEntity, defaultValue: string) {
-    return entity && entity.state ? entity.state : defaultValue;
+  private avatar(entity: HassEntity, className: string): TemplateResult {
+    const picture = avatarUrl(entity);
+    return picture
+      ? html`<img src="${picture}" class="${className}" />`
+      : html`<div class="${className}"></div>`;
   }
 
-  getAttr(entity: HassEntity, attribute: string, defaultValue: string) {
-    return entity && entity.attributes ? entity.attributes[attribute] : defaultValue;
+  private notFound(entityId: string | undefined): TemplateResult {
+    return html`<div class="not-found">
+      ${this.text('common.entity_not_found').replace('{entity}', entityId ?? '')}
+    </div>`;
   }
 
-  formatLastOnline(lastOnline: string, state: string): string {
-    return this.setAmountAndUnit(lastOnline, localize('common.in_state')).replace(
-      '{state}',
-      localize(`statuses.${state}`),
-    );
+  private openMoreInfo(entity: HassEntity): void {
+    const event = new Event('hass-more-info', { bubbles: true, composed: true }) as Event & {
+      detail?: { entityId: string };
+    };
+    event.detail = { entityId: entity.entity_id };
+    this.dispatchEvent(event);
   }
 
-  formatLastSeen(lastSeen: string) {
-    return this.setAmountAndUnit(lastSeen, localize('common.last_seen'));
+  /** "Last seen 5 min ago", or nothing when the player has no such time. */
+  private lastSeen(entity: HassEntity): string {
+    const since = elapsed(entity.attributes.last_online as string | number | undefined);
+    if (!since) {
+      return '';
+    }
+    return this.text('common.last_seen')
+      .replace('{amount}', String(since.amount))
+      .replace('{unit}', this.text(`time_units.${since.unit}`));
   }
 
-  setAmountAndUnit(time: string, text: string) {
-    if (isNaN(parseInt(time))) return '';
-
-    const seconds = (new Date().getTime() - new Date(time).getTime()) / 1000;
-
-    const amount =
-      seconds < 60
-        ? seconds
-        : seconds < 3600
-          ? Math.floor(seconds / 60)
-          : seconds < 86400
-            ? Math.floor(seconds / 60 / 60)
-            : seconds < 604800
-              ? Math.floor(seconds / 60 / 60 / 24)
-              : Math.floor(seconds / 60 / 60 / 24 / 7);
-
-    const unit =
-      seconds < 60
-        ? 'time_units.seconds'
-        : seconds < 3600
-          ? 'time_units.minutes'
-          : seconds < 86400
-            ? 'time_units.hours'
-            : seconds < 604800
-              ? 'time_units.days'
-              : 'time_units.weeks';
-
-    return text.replace('{amount}', amount.toString()).replace('{unit}', localize(unit));
+  /** "Offline for 3 days", or nothing when the player has no such time. */
+  private inState(entity: HassEntity): string {
+    const since = elapsed(entity.attributes.last_online as string | number | undefined);
+    if (!since) {
+      return '';
+    }
+    return this.text('common.in_state')
+      .replace('{state}', this.text(`statuses.${entity.state}`))
+      .replace('{amount}', String(since.amount))
+      .replace('{unit}', this.text(`time_units.${since.unit}`));
   }
 
-  renderUserAvatar(entity: HassEntity, class_name: string): TemplateResult {
-    return entity.attributes.entity_picture
-      ? html`<img src="${entity.attributes.entity_picture.replace('_medium', '_full')}" class="${class_name}" />`
-      : html`<div class="${class_name}"></div>`;
+  private text(key: string): string {
+    const language = this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
+    return translate(language, key);
   }
 
-  static get styles(): CSSResult {
+  static get styles(): CSSResultGroup {
     return css`
       .card-header {
         width: 100%;
@@ -552,5 +464,11 @@ export class SteamCardCompact extends LitElement {
         display: flex;
       }
     `;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'steam-card-compact': SteamCardCompact;
   }
 }

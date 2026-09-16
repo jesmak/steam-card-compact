@@ -1,15 +1,17 @@
-import { LovelaceCardConfig } from 'custom-card-helpers';
+import type { LovelaceCardConfig } from './hass';
 
 export interface SteamCardCompactConfig extends LovelaceCardConfig {
-  type: string;
+  /** One player for the big card, or several for the list. Left out when auto_populate is on. */
   entity?: string | string[];
   title?: string;
+  /** Draws the header picture of the game behind the player. */
   game_background?: boolean;
+  /** Lists every sensor.steam_* entity there is. */
   auto_populate?: boolean;
-  name_overrides?: NameOverrideConfig[];
+  name_overrides?: NameOverride[];
 }
 
-export interface NameOverrideConfig extends LovelaceCardConfig {
+export interface NameOverride {
   entity: string;
   name: string;
 }
