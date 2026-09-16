@@ -1,0 +1,6 @@
+dist/
+node_modules/
+package-lock.json
+# Editor and container scaffolding, not something to hold to a code style.
+.vscode/
+.devcontainer/

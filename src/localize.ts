@@ -1,32 +1,26 @@
-import * as en from './languages/en.json';
-import * as fi from './languages/fi.json';
+import en from './languages/en.json';
+import fi from './languages/fi.json';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const languages: any = {
-  en: en,
-  fi: fi,
-};
+const LANGUAGES: Record<string, Record<string, unknown>> = { en, fi };
 
-export function localize(string: string, search = '', replace = ''): string {
-  let lang = localStorage.getItem('selectedLanguage')?.replace(/['"]+/g, '').replace('-', '_');
-  if (!lang || lang === 'null') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hass = (document.querySelector('home-assistant') as any).hass;
-    lang = hass.selectedLanguage || hass.language || 'en';
+/** A text in the viewer's language, falling back to English. Keys are dotted, such as `common.name`. */
+export function translate(language: string | undefined, key: string): string {
+  const code = (language ?? 'en').split(/[-_]/)[0].toLowerCase();
+  return read(LANGUAGES[code], key) ?? read(LANGUAGES.en, key) ?? key;
+}
+
+function read(table: Record<string, unknown> | undefined, key: string): string | undefined {
+  let value: unknown = table;
+  for (const part of key.split('.')) {
+    if (value === null || typeof value !== 'object') {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[part];
   }
+  return typeof value === 'string' ? value : undefined;
+}
 
-  let translated: string;
-
-  try {
-    translated = string.split('.').reduce((o, i) => o[i], languages[lang as string]);
-  } catch (e) {
-    translated = string.split('.').reduce((o, i) => o[i], languages['en']);
-  }
-
-  if (translated === undefined) translated = string.split('.').reduce((o, i) => o[i], languages['en']);
-
-  if (search !== '' && replace !== '') {
-    translated = translated.replace(search, replace);
-  }
-  return translated;
+/** The language to use before Home Assistant has handed the card its own. */
+export function browserLanguage(): string {
+  return document.documentElement.lang || navigator.language || 'en';
 }

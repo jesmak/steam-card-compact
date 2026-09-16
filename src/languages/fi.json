@@ -19,6 +19,7 @@
     "minutes": "min",
     "hours": "h",
     "days": "pv",
-    "weeks": "vko"
+    "weeks": "vko",
+    "seconds": "s"
   }
 }
