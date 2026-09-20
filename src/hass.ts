@@ -3,7 +3,7 @@
 export interface HassEntity {
   entity_id: string;
   state: string;
-  attributes: Record<string, string | number | boolean | undefined>;
+  attributes: Record<string, unknown>;
 }
 
 export interface HomeAssistant {

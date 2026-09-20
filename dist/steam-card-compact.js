@@ -605,13 +605,39 @@ function r5(r6) {
 
 // src/const.ts
 var CARD_VERSION = "2.0.0";
-var STATUSES = ["online", "away", "snooze", "offline", "unavailable"];
+var STATUSES = [
+  "online",
+  "busy",
+  "looking_to_play",
+  "looking_to_trade",
+  "away",
+  "snooze",
+  "offline",
+  "unavailable"
+];
 var STEAM_PREFIX = "sensor.steam_";
+var STORE_URL = "https://store.steampowered.com/app/";
 
 // src/friends.ts
+function isSteamPlayer(entity) {
+  if (entity === void 0 || !entity.entity_id.startsWith("sensor.")) {
+    return false;
+  }
+  if (entity.entity_id.startsWith(STEAM_PREFIX)) {
+    return true;
+  }
+  const options = entity.attributes.options;
+  if (Array.isArray(options) && options.includes("looking_to_trade")) {
+    return true;
+  }
+  return entity.attributes.level !== void 0 && entity.attributes.last_online !== void 0;
+}
 function displayName(entity, overrides) {
   const override = overrides?.find((item) => item?.entity === entity.entity_id)?.name;
   return override || String(entity.attributes.friendly_name ?? entity.entity_id);
+}
+function steamPlayers(states) {
+  return Object.keys(states).filter((id) => isSteamPlayer(states[id])).sort();
 }
 function sortByName(entities, overrides) {
   return [...entities].sort(
@@ -670,12 +696,16 @@ var en_default = {
     name: "Steam card compact",
     last_seen: "Last seen {amount} {unit} ago",
     in_state: "{state} for {amount} {unit}",
-    entity_not_found: "Entity {entity} was not found."
+    entity_not_found: "Entity {entity} was not found.",
+    level: "Steam level {level}"
   },
   statuses: {
     online: "Online",
+    busy: "Busy",
     away: "Away",
     snooze: "Snoozing",
+    looking_to_play: "Looking to play",
+    looking_to_trade: "Looking to trade",
     offline: "Offline",
     unavailable: "Unavailable"
   },
@@ -685,6 +715,20 @@ var en_default = {
     days: "days",
     weeks: "weeks",
     seconds: "s"
+  },
+  editor: {
+    entity: "Players",
+    entity_helper: "The players to show. One player with the player layout draws the big card.",
+    auto_populate: "Every player",
+    auto_populate_helper: "Lists every sensor.steam_* entity instead of naming them.",
+    title: "Title",
+    layout: "Layout",
+    layout_helper: "Automatic draws the big card when one player is named.",
+    layout_auto: "Automatic",
+    layout_list: "List",
+    layout_player: "One player",
+    game_background: "Game picture",
+    game_background_helper: "Draws the game's picture behind the player."
   }
 };
 
@@ -697,12 +741,16 @@ var fi_default = {
     name: "Steam card compact",
     last_seen: "N\xE4hty {amount} {unit} sitten",
     in_state: "{state} viimeiset {amount} {unit}",
-    entity_not_found: "Entiteetti\xE4 {entity} ei l\xF6ydetty."
+    entity_not_found: "Entiteetti\xE4 {entity} ei l\xF6ydetty.",
+    level: "Steam-taso {level}"
   },
   statuses: {
     online: "Paikalla",
+    busy: "Varattu",
     away: "Poissa",
     snooze: "Toimeton",
+    looking_to_play: "Etsii peliseuraa",
+    looking_to_trade: "Haluaa vaihtaa",
     offline: "Offline-tilassa",
     unavailable: "Ei saatavilla"
   },
@@ -712,6 +760,20 @@ var fi_default = {
     days: "pv",
     weeks: "vko",
     seconds: "s"
+  },
+  editor: {
+    entity: "Pelaajat",
+    entity_helper: "N\xE4ytett\xE4v\xE4t pelaajat. Yksi pelaaja yhden pelaajan asettelulla piirt\xE4\xE4 ison kortin.",
+    auto_populate: "Kaikki pelaajat",
+    auto_populate_helper: "Listaa kaikki sensor.steam_*-entiteetit ilman ett\xE4 ne nimet\xE4\xE4n.",
+    title: "Otsikko",
+    layout: "Asettelu",
+    layout_helper: "Automaattinen piirt\xE4\xE4 ison kortin, kun pelaajia on nimetty yksi.",
+    layout_auto: "Automaattinen",
+    layout_list: "Lista",
+    layout_player: "Yksi pelaaja",
+    game_background: "Pelin kuva",
+    game_background_helper: "Piirt\xE4\xE4 pelin kuvan pelaajan taakse."
   }
 };
 
@@ -735,57 +797,163 @@ function browserLanguage() {
   return document.documentElement.lang || navigator.language || "en";
 }
 
+// src/editor.ts
+var DEFAULTS = { layout: "auto", game_background: true, auto_populate: false };
+function steamEntities(hass) {
+  return steamPlayers(hass.states);
+}
+function schema(hass, text, autoPopulate) {
+  return [
+    ...autoPopulate ? [] : [
+      {
+        name: "entity",
+        required: true,
+        selector: {
+          entity: { multiple: true, domain: "sensor", include_entities: steamEntities(hass) }
+        }
+      }
+    ],
+    { name: "auto_populate", selector: { boolean: {} } },
+    {
+      name: "layout",
+      selector: {
+        select: {
+          mode: "dropdown",
+          options: [
+            { value: "auto", label: text("editor.layout_auto") },
+            { value: "list", label: text("editor.layout_list") },
+            { value: "player", label: text("editor.layout_player") }
+          ]
+        }
+      }
+    },
+    { name: "title", selector: { text: {} } },
+    { name: "game_background", selector: { boolean: {} } }
+  ];
+}
+var SteamCardCompactEditor = class extends i4 {
+  constructor() {
+    super(...arguments);
+    this.config = { type: "custom:steam-card-compact" };
+  }
+  setConfig(config) {
+    this.config = { ...config };
+  }
+  render() {
+    if (!this.hass) {
+      return A;
+    }
+    const entity = typeof this.config.entity === "string" ? [this.config.entity] : this.config.entity;
+    return b2`
+      <ha-form
+        .hass=${this.hass}
+        .data=${{ ...DEFAULTS, ...this.config, entity }}
+        .schema=${schema(this.hass, (key) => this.text(key), this.config.auto_populate === true)}
+        .computeLabel=${(entry) => this.text(`editor.${entry.name}`)}
+        .computeHelper=${(entry) => this.helper(entry.name)}
+        @value-changed=${this.valueChanged}
+      ></ha-form>
+    `;
+  }
+  valueChanged(event) {
+    const config = { ...event.detail.value };
+    if (Array.isArray(config.entity)) {
+      if (config.entity.length === 0) {
+        delete config.entity;
+      } else if (config.entity.length === 1 && (config.layout ?? "auto") !== "list") {
+        config.entity = config.entity[0];
+      }
+    }
+    if (config.auto_populate) {
+      delete config.entity;
+    }
+    if (!config.title) {
+      delete config.title;
+    }
+    for (const [key, value] of Object.entries(DEFAULTS)) {
+      if (config[key] === value) {
+        delete config[key];
+      }
+    }
+    this.dispatchEvent(
+      new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true })
+    );
+  }
+  text(key) {
+    return translate(this.language(), key);
+  }
+  helper(name) {
+    const key = `editor.${name}_helper`;
+    const helper = translate(this.language(), key);
+    return helper === key ? void 0 : helper;
+  }
+  language() {
+    return this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
+  }
+};
+__decorateClass([
+  n4({ attribute: false })
+], SteamCardCompactEditor.prototype, "hass", 2);
+__decorateClass([
+  r5()
+], SteamCardCompactEditor.prototype, "config", 2);
+SteamCardCompactEditor = __decorateClass([
+  t3("steam-card-compact-editor")
+], SteamCardCompactEditor);
+
 // src/logo.ts
 var STEAM_LOGO = b2`
-  <svg class="steam-game-default-bg single" version="1.0" viewBox="0 0 467 143">
-    <g id="g6" transform="translate(-66.97417,-43.726937)">
-      <path
-        class="st0"
-        d="m 137.9,45.1 c -36.7,0 -66.8,28.3 -69.7,64.3 l 37.5,15.5 c 3.2,-2.2 7,-3.4 11.1,-3.4 0.4,0 0.7,0 1.1,0 l 16.7,-24.2 c 0,-0.1 0,-0.2 0,-0.3 0,-14.5 11.8,-26.4 26.4,-26.4 14.5,0 26.4,11.8 26.4,26.4 0,14.6 -11.8,26.4 -26.4,26.4 -0.2,0 -0.4,0 -0.6,0 l -23.8,17 c 0,0.3 0,0.6 0,0.9 0,10.9 -8.9,19.8 -19.8,19.8 -9.6,0 -17.6,-6.8 -19.4,-15.9 L 70.6,134.1 c 8.3,29.4 35.3,50.9 67.3,50.9 38.6,0 69.9,-31.3 69.9,-69.9 0,-38.7 -31.3,-70 -69.9,-70"
-        id="path1"
-      />
-      <path
-        class="st0"
-        d="m 112,151.2 -8.6,-3.5 c 1.5,3.2 4.2,5.8 7.7,7.3 7.6,3.1 16.3,-0.4 19.4,-8 1.5,-3.7 1.5,-7.7 0,-11.4 -1.5,-3.7 -4.4,-6.5 -8,-8.1 -3.6,-1.5 -7.5,-1.5 -10.9,-0.2 l 8.9,3.7 c 5.6,2.3 8.2,8.7 5.9,14.3 -2.4,5.6 -8.8,8.3 -14.4,5.9"
-        id="path2"
-      />
-      <path
-        class="st0"
-        d="m 178.5,97 c 0,-9.7 -7.9,-17.6 -17.6,-17.6 -9.7,0 -17.6,7.9 -17.6,17.6 0,9.7 7.9,17.6 17.6,17.6 9.7,0 17.6,-7.9 17.6,-17.6 m -30.7,0 c 0,-7.3 5.9,-13.2 13.2,-13.2 7.3,0 13.2,5.9 13.2,13.2 0,7.3 -5.9,13.2 -13.2,13.2 -7.3,0 -13.2,-5.9 -13.2,-13.2"
-        id="path3"
-      />
-      <path
-        class="st0"
-        d="m 282.5,93 -4.7,8.2 c -3.6,-2.5 -8.5,-4 -12.8,-4 -4.9,0 -7.9,2 -7.9,5.6 0,4.4 5.4,5.4 13.3,8.3 8.6,3 13.5,6.6 13.5,14.4 0,10.7 -8.4,16.8 -20.6,16.8 -5.9,0 -13.1,-1.5 -18.5,-4.9 l 3.4,-9.1 c 4.5,2.4 9.8,3.7 14.5,3.7 6.4,0 9.5,-2.4 9.5,-5.9 0,-4 -4.6,-5.2 -12.1,-7.7 -8.5,-2.9 -14.5,-6.6 -14.5,-15.3 0,-9.8 7.8,-15.4 19.1,-15.4 7.9,0.1 14.3,2.6 17.8,5.3"
-        id="path4"
-      />
-      <polygon
-        class="st0"
-        points="335.1,98.2 319.1,98.2 319.1,141.4 308.1,141.4 308.1,98.2 292.1,98.2 292.1,88.7 335.1,88.7 "
-        id="polygon4"
-      />
-      <polygon
-        class="st0"
-        points="382.8,141.4 347.3,141.4 347.3,88.7 382.8,88.7 382.8,98.2 358.3,98.2 358.3,110 379.4,110 379.4,119.5 358.3,119.5 358.3,131.9 382.8,131.9 "
-        id="polygon5"
-      />
-      <path
-        class="st0"
-        d="m 407.4,131.2 -3.5,10.2 h -11.6 l 19.8,-52.7 h 11.1 l 20.3,52.7 h -12 l -3.6,-10.2 z m 10.2,-29.9 -7.2,21.1 H 425 Z"
-        id="path5"
-      />
-      <polygon
-        class="st0"
-        points="485.8,139.9 479.5,139.9 465.4,109.4 465.4,141.4 454.8,141.4 454.8,88.7 465.3,88.7 483,126.8 500.1,88.7 510.8,88.7 510.8,141.4 500.2,141.4 500.2,109.1 "
-        id="polygon6"
-      />
-      <path
-        class="st0"
-        d="m 532.1,95.4 c 0,4.5 -3.4,7.3 -7.3,7.3 -3.9,0 -7.3,-2.8 -7.3,-7.3 0,-4.5 3.4,-7.3 7.3,-7.3 3.9,-0.1 7.3,2.7 7.3,7.3 m -13.4,0 c 0,3.8 2.7,6.2 6.1,6.2 3.3,0 6.1,-2.4 6.1,-6.2 0,-3.8 -2.7,-6.1 -6.1,-6.1 -3.3,-0.1 -6.1,2.3 -6.1,6.1 m 6.2,-3.8 c 1.9,0 2.5,1 2.5,2.1 0,1 -0.6,1.7 -1.3,2 l 1.7,3.2 h -1.4 L 525,96.1 h -1.5 v 2.8 h -1.2 v -7.2 h 2.6 z m -1.4,3.4 h 1.3 c 0.8,0 1.3,-0.5 1.3,-1.2 0,-0.7 -0.4,-1.1 -1.3,-1.1 h -1.3 z"
-        id="path6"
-      />
-    </g>
-  </svg>
+  <div class="steam-game-default-bg">
+    <svg class="steam-logo" version="1.0" viewBox="0 0 467 143" preserveAspectRatio="xMidYMid meet">
+      <g id="g6" transform="translate(-66.97417,-43.726937)">
+        <path
+          class="st0"
+          d="m 137.9,45.1 c -36.7,0 -66.8,28.3 -69.7,64.3 l 37.5,15.5 c 3.2,-2.2 7,-3.4 11.1,-3.4 0.4,0 0.7,0 1.1,0 l 16.7,-24.2 c 0,-0.1 0,-0.2 0,-0.3 0,-14.5 11.8,-26.4 26.4,-26.4 14.5,0 26.4,11.8 26.4,26.4 0,14.6 -11.8,26.4 -26.4,26.4 -0.2,0 -0.4,0 -0.6,0 l -23.8,17 c 0,0.3 0,0.6 0,0.9 0,10.9 -8.9,19.8 -19.8,19.8 -9.6,0 -17.6,-6.8 -19.4,-15.9 L 70.6,134.1 c 8.3,29.4 35.3,50.9 67.3,50.9 38.6,0 69.9,-31.3 69.9,-69.9 0,-38.7 -31.3,-70 -69.9,-70"
+          id="path1"
+        />
+        <path
+          class="st0"
+          d="m 112,151.2 -8.6,-3.5 c 1.5,3.2 4.2,5.8 7.7,7.3 7.6,3.1 16.3,-0.4 19.4,-8 1.5,-3.7 1.5,-7.7 0,-11.4 -1.5,-3.7 -4.4,-6.5 -8,-8.1 -3.6,-1.5 -7.5,-1.5 -10.9,-0.2 l 8.9,3.7 c 5.6,2.3 8.2,8.7 5.9,14.3 -2.4,5.6 -8.8,8.3 -14.4,5.9"
+          id="path2"
+        />
+        <path
+          class="st0"
+          d="m 178.5,97 c 0,-9.7 -7.9,-17.6 -17.6,-17.6 -9.7,0 -17.6,7.9 -17.6,17.6 0,9.7 7.9,17.6 17.6,17.6 9.7,0 17.6,-7.9 17.6,-17.6 m -30.7,0 c 0,-7.3 5.9,-13.2 13.2,-13.2 7.3,0 13.2,5.9 13.2,13.2 0,7.3 -5.9,13.2 -13.2,13.2 -7.3,0 -13.2,-5.9 -13.2,-13.2"
+          id="path3"
+        />
+        <path
+          class="st0"
+          d="m 282.5,93 -4.7,8.2 c -3.6,-2.5 -8.5,-4 -12.8,-4 -4.9,0 -7.9,2 -7.9,5.6 0,4.4 5.4,5.4 13.3,8.3 8.6,3 13.5,6.6 13.5,14.4 0,10.7 -8.4,16.8 -20.6,16.8 -5.9,0 -13.1,-1.5 -18.5,-4.9 l 3.4,-9.1 c 4.5,2.4 9.8,3.7 14.5,3.7 6.4,0 9.5,-2.4 9.5,-5.9 0,-4 -4.6,-5.2 -12.1,-7.7 -8.5,-2.9 -14.5,-6.6 -14.5,-15.3 0,-9.8 7.8,-15.4 19.1,-15.4 7.9,0.1 14.3,2.6 17.8,5.3"
+          id="path4"
+        />
+        <polygon
+          class="st0"
+          points="335.1,98.2 319.1,98.2 319.1,141.4 308.1,141.4 308.1,98.2 292.1,98.2 292.1,88.7 335.1,88.7 "
+          id="polygon4"
+        />
+        <polygon
+          class="st0"
+          points="382.8,141.4 347.3,141.4 347.3,88.7 382.8,88.7 382.8,98.2 358.3,98.2 358.3,110 379.4,110 379.4,119.5 358.3,119.5 358.3,131.9 382.8,131.9 "
+          id="polygon5"
+        />
+        <path
+          class="st0"
+          d="m 407.4,131.2 -3.5,10.2 h -11.6 l 19.8,-52.7 h 11.1 l 20.3,52.7 h -12 l -3.6,-10.2 z m 10.2,-29.9 -7.2,21.1 H 425 Z"
+          id="path5"
+        />
+        <polygon
+          class="st0"
+          points="485.8,139.9 479.5,139.9 465.4,109.4 465.4,141.4 454.8,141.4 454.8,88.7 465.3,88.7 483,126.8 500.1,88.7 510.8,88.7 510.8,141.4 500.2,141.4 500.2,109.1 "
+          id="polygon6"
+        />
+        <path
+          class="st0"
+          d="m 532.1,95.4 c 0,4.5 -3.4,7.3 -7.3,7.3 -3.9,0 -7.3,-2.8 -7.3,-7.3 0,-4.5 3.4,-7.3 7.3,-7.3 3.9,-0.1 7.3,2.7 7.3,7.3 m -13.4,0 c 0,3.8 2.7,6.2 6.1,6.2 3.3,0 6.1,-2.4 6.1,-6.2 0,-3.8 -2.7,-6.1 -6.1,-6.1 -3.3,-0.1 -6.1,2.3 -6.1,6.1 m 6.2,-3.8 c 1.9,0 2.5,1 2.5,2.1 0,1 -0.6,1.7 -1.3,2 l 1.7,3.2 h -1.4 L 525,96.1 h -1.5 v 2.8 h -1.2 v -7.2 h 2.6 z m -1.4,3.4 h 1.3 c 0.8,0 1.3,-0.5 1.3,-1.2 0,-0.7 -0.4,-1.1 -1.3,-1.1 h -1.3 z"
+          id="path6"
+        />
+      </g>
+    </svg>
+  </div>
 `;
 
 // src/steam-card-compact.ts
@@ -805,9 +973,12 @@ registry.customCards.push({
   preview: true
 });
 var SteamCardCompact = class extends i4 {
+  static getConfigElement() {
+    return document.createElement("steam-card-compact-editor");
+  }
   /** Offers every Steam player there is when the card is added from the picker. */
   static getStubConfig(hass) {
-    const players = Object.keys(hass?.states ?? {}).filter((id) => id.startsWith(STEAM_PREFIX));
+    const players = steamPlayers(hass?.states ?? {});
     return players.length > 0 ? { entity: players } : { auto_populate: true };
   }
   setConfig(config) {
@@ -819,6 +990,9 @@ var SteamCardCompact = class extends i4 {
   getCardSize() {
     const shown = this.wanted().length;
     return this.single() ? 2 : 1 + Math.ceil(shown / 2);
+  }
+  getGridOptions() {
+    return { columns: 12, rows: "auto", min_columns: 6 };
   }
   shouldUpdate(changed) {
     if (changed.has("config") || !this.config) {
@@ -836,14 +1010,21 @@ var SteamCardCompact = class extends i4 {
       return [];
     }
     if (this.config.auto_populate) {
-      return Object.keys(this.hass.states).filter((id) => id.startsWith(STEAM_PREFIX));
+      return steamPlayers(this.hass.states);
     }
     const { entity } = this.config;
     return entity === void 0 ? [] : typeof entity === "string" ? [entity] : entity;
   }
-  /** One named player, and not the automatic list, means the big card. */
+  /** Whether one player gets the big card: asked for, or one named player with the automatic layout. */
   single() {
+    const layout = this.config?.layout ?? "auto";
+    if (layout !== "auto") {
+      return layout === "player";
+    }
     return !this.config?.auto_populate && typeof this.config?.entity === "string";
+  }
+  get gameBackground() {
+    return this.config?.game_background !== false;
   }
   render() {
     if (!this.hass || !this.config) {
@@ -853,7 +1034,7 @@ var SteamCardCompact = class extends i4 {
     const players = wanted.map((id) => this.hass?.states[id]).filter((entity) => entity !== void 0);
     const missing = wanted.filter((id) => this.hass?.states[id] === void 0);
     if (this.single()) {
-      return b2`<ha-card>
+      return b2`<ha-card class="big-card">
         ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
       </ha-card>`;
     }
@@ -862,7 +1043,7 @@ var SteamCardCompact = class extends i4 {
   listCard(players, missing) {
     const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
     const rows = [
-      b2`<div class="card-header"><div class="name">${this.config?.title || "Steam Friends"}</div></div>`
+      b2`<div class="card-header">${this.config?.title || "Steam Friends"}</div>`
     ];
     for (const status of STATUSES) {
       const group = groups[status];
@@ -880,56 +1061,65 @@ var SteamCardCompact = class extends i4 {
   }
   listPlayer(entity) {
     const game = entity.attributes.game;
+    const header = entity.attributes.game_image_header;
     return b2`
-      <div class="steam-multi clickable ${entity.state}" @click=${() => this.openMoreInfo(entity)}>
-        <div class="steam-user">
-          ${entity.state !== "unavailable" ? this.avatar(entity, `steam-avatar ${entity.state}`) : A}
-          <div class="user-container ${game ? "" : "no-game"}">
-            <div class="steam-username ${entity.state}">
-              ${displayName(entity, this.config?.name_overrides)}
-            </div>
-            ${game ? b2`<div class="steam-value ${entity.state}">${game}</div>` : A}
-            ${entity.state === "offline" ? b2`<div class="steam-last-online ${entity.state}">
-                    <span class="steam-last-online-text ${entity.state}">${this.lastSeen(entity)}</span>
-                  </div>` : A}
-          </div>
+      <div class="player clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
+        ${game && this.gameBackground && header ? b2`<img src="${String(header)}" class="row-picture" alt="" />` : A}
+        ${this.avatar(entity)}
+        <div class="details">
+          <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
+          ${game ? this.gameLine(entity) : A}
+          ${entity.state === "offline" ? b2`<div class="seen">${this.lastSeen(entity)}</div>` : A}
         </div>
-        ${game && this.config?.game_background !== false ? b2`<img src="${String(entity.attributes.game_image_header ?? "")}" class="steam-game-bg" />` : A}
       </div>
     `;
   }
   bigCard(entity) {
     const game = entity.attributes.game;
+    const picture = entity.attributes.game_image_main ?? entity.attributes.game_image_header;
     return b2`
-      <div class="single-card-container clickable" @click=${() => this.openMoreInfo(entity)}>
-        <div class="steam-avatar-container ${entity.state}">
-          ${this.avatar(entity, `steam-avatar single ${entity.state}`)}
-          <div class="steam-level single ${entity.state}">
-            <span class="steam-level-text-container single">
-              <span class="steam-level-text single">${entity.attributes.level ?? "?"}</span>
-            </span>
-            <ha-icon icon="mdi:shield"></ha-icon>
-          </div>
+      <div class="player big clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
+        ${this.gameBackground ? game && picture ? b2`<img src="${String(picture)}" class="big-picture" alt="" />` : STEAM_LOGO : A}
+        ${this.avatar(entity)}
+        <div class="details">
+          <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
+          <div class="seen">${this.inState(entity)}</div>
+          ${game ? this.gameLine(entity) : A}
         </div>
-        <div class="user-data-container single">
-          <div class="steam-username ${entity.state}">
-            ${displayName(entity, this.config?.name_overrides)}
-          </div>
-          <div class="steam-last-online ${entity.state}">
-            <span class="steam-last-online-text ${entity.state}">${this.inState(entity)}</span>
-          </div>
-        </div>
-        ${this.config?.game_background ? game ? b2`<img
-                  src="${String(entity.attributes.game_image_header ?? "")}"
-                  class="steam-game-bg single"
-                />` : STEAM_LOGO : A}
-        ${game ? b2`<div class="steam-game">${game}</div>` : A}
       </div>
     `;
   }
-  avatar(entity, className) {
+  /** The game, with its icon. Clicking it opens the game in the Steam store. */
+  gameLine(entity) {
+    const icon = entity.attributes.game_icon;
+    const id = entity.attributes.game_id;
+    return b2`
+      <div
+        class="game ${id ? "clickable" : ""}"
+        @click=${(event) => this.openStore(event, id)}
+        title="${String(entity.attributes.game ?? "")}"
+      >
+        ${icon ? b2`<img src="${String(icon)}" class="game-icon" alt="" />` : A}
+        <span class="game-name">${entity.attributes.game}</span>
+      </div>
+    `;
+  }
+  /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */
+  avatar(entity) {
     const picture = avatarUrl(entity);
-    return picture ? b2`<img src="${picture}" class="${className}" />` : b2`<div class="${className}"></div>`;
+    const level = entity.attributes.level;
+    return b2`
+      <div class="avatar-wrap">
+        ${picture ? b2`<img src="${picture}" class="avatar" alt="" />` : b2`<div class="avatar avatar-blank"></div>`}
+        ${level === void 0 || level === null ? A : b2`<span class="level" title="${this.text("common.level").replace("{level}", String(level))}">
+                ${level}
+              </span>`}
+      </div>
+    `;
+  }
+  /** The state the card draws a player in: in a game, or whatever Steam says. */
+  mood(entity) {
+    return entity.attributes.game && entity.state !== "offline" ? `${entity.state} ingame` : entity.state;
   }
   notFound(entityId) {
     return b2`<div class="not-found">
@@ -940,6 +1130,13 @@ var SteamCardCompact = class extends i4 {
     const event = new Event("hass-more-info", { bubbles: true, composed: true });
     event.detail = { entityId: entity.entity_id };
     this.dispatchEvent(event);
+  }
+  openStore(event, gameId) {
+    if (gameId === void 0 || gameId === null || gameId === "") {
+      return;
+    }
+    event.stopPropagation();
+    window.open(`${STORE_URL}${String(gameId)}`, "_blank", "noopener");
   }
   /** "Last seen 5 min ago", or nothing when the player has no such time. */
   lastSeen(entity) {
@@ -953,7 +1150,7 @@ var SteamCardCompact = class extends i4 {
   inState(entity) {
     const since = elapsed(entity.attributes.last_online);
     if (!since) {
-      return "";
+      return this.text(`statuses.${entity.state}`);
     }
     return this.text("common.in_state").replace("{state}", this.text(`statuses.${entity.state}`)).replace("{amount}", String(since.amount)).replace("{unit}", this.text(`time_units.${since.unit}`));
   }
@@ -963,10 +1160,31 @@ var SteamCardCompact = class extends i4 {
   }
   static get styles() {
     return i`
+      /* The colour of each state, used for the ring around an avatar and its level. */
+      :host {
+        --steam-online: #57cbde;
+        --steam-ingame: #90ba3c;
+        --steam-busy: #d9544e;
+        --steam-away: #d6ca1c;
+        --steam-snooze: #4081e4;
+        --steam-looking: #c58ade;
+        --steam-offline: #8f98a0;
+      }
+
+      ha-card {
+        padding: 16px;
+        overflow: hidden;
+      }
+
+      /* The big card is all one player, so its picture reaches the edges. */
+      ha-card.big-card {
+        padding: 0;
+      }
+
       .card-header {
-        width: 100%;
-        padding-top: 0;
-        padding-bottom: 8px;
+        padding: 0 0 8px 0;
+        font-size: var(--ha-card-header-font-size, 24px);
+        line-height: 1.2;
       }
 
       .clickable {
@@ -974,210 +1192,257 @@ var SteamCardCompact = class extends i4 {
       }
 
       .status-category {
-        text-align: left;
-        width: 100%;
         margin: 10px 0 5px 0;
-      }
-
-      .steam-game-bg {
-        z-index: 0;
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 41px;
-        width: auto;
-        opacity: 0.5;
-        mask-image: linear-gradient(to right, transparent 1%, black 90%);
-      }
-
-      .steam-game-default-bg.single {
-        position: absolute;
-        top: 5px;
-        left: 135px;
-        height: 90%;
-        opacity: 0.3;
-        mask-image: linear-gradient(to right, transparent 1%, black 90%);
-      }
-
-      .steam-game-bg.single {
-        height: 100%;
-        width: 130%;
-        opacity: 0.3;
-        object-fit: cover;
-        border-radius: var(--ha-card-border-radius);
-      }
-
-      .steam-game {
-        width: 100%;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-      }
-
-      .not-found {
-        background-color: yellow;
-        font-family: sans-serif;
-        font-size: 14px;
-        padding: 8px;
-      }
-
-      ha-card {
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        overflow: hidden;
-      }
-
-      .single-card-container {
-        width: 100%;
-        height: 80px;
-      }
-
-      .steam-avatar-container {
-        display: inline-block;
-      }
-
-      .steam-avatar {
-        min-width: 36px;
-        min-height: 36px;
-        max-width: 36px;
-        max-height: 36px;
-        border-style: solid;
-        border-width: 1px 1px 4px 1px;
-        object-fit: cover;
-        margin-bottom: 3px;
-        display: block;
-      }
-
-      .steam-avatar.single {
-        min-width: 50px;
-        min-height: 50px;
-        max-width: 50px;
-        max-height: 50px;
-        border-width: 1px 1px 5px 1px;
-        display: block;
-      }
-
-      .steam-avatar.online {
-        border-color: #6cff4f9d;
-        box-shadow: 1px 0.5px 3px #6cff4f88;
-      }
-
-      .steam-avatar.away {
-        border-color: #d6ca1c9d;
-        box-shadow: 1px 0.5px 3px #d6ca1c88;
-      }
-
-      .steam-avatar.snooze {
-        border-color: #4081e49d;
-        box-shadow: 1px 0.5px 3px #4081e488;
-      }
-
-      .steam-avatar.offline {
-        border-color: #aaaaaa9d;
-        opacity: 0.2;
-        box-shadow: 1px 0.5px 3px #aaaaaa88;
-      }
-
-      .steam-username {
-        width: 99%;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-        font-weight: 600;
-      }
-
-      .steam-username.offline,
-      .steam-value.offline,
-      .steam-level.single.offline,
-      .steam-last-online-text.offline,
-      .online-status-icon.offline {
-        opacity: 0.5;
-      }
-
-      .steam-value {
-        font-size: 10px;
-        width: 99%;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-      }
-
-      .user-container {
-        margin-left: 0.5em;
-        width: 100%;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-        align-content: center;
-      }
-
-      .user-data-container.single {
-        display: inline-block;
-        width: calc(100% - 76px);
-        vertical-align: top;
-        padding-left: 10px;
-      }
-
-      .no-game {
-        align-items: center;
-      }
-
-      .steam-level.single {
-        position: absolute;
-        top: 56px;
-        left: 56px;
-      }
-
-      .steam-avatar-container.unavailable {
-        display: none;
-      }
-
-      .steam-level > .steam-level-text-container {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        justify-content: center;
-        color: var(--card-background-color);
-        z-index: 2;
-      }
-
-      .steam-last-online {
-        width: 100%;
-        display: flex;
-        font-size: smaller;
-      }
-
-      .steam-last-online-text {
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-      }
-
-      .steam-multi {
-        width: calc(50% - 5px);
-        display: inline-block;
-        align-items: center;
-        justify-content: space-between;
-        position: relative;
-        overflow: hidden;
-      }
-
-      .steam-multi:first-child {
-        margin-right: 3px;
-      }
-
-      .steam-multi:nth-child(2) {
-        margin-left: 3px;
+        font-size: 13px;
+        color: var(--secondary-text-color);
       }
 
       .user-row {
-        width: 100%;
+        display: flex;
+        gap: 8px;
       }
 
-      .steam-multi .steam-user {
+      /* A row of the list holds half of it; the big card fills its own. */
+      .player {
+        position: relative;
         display: flex;
+        align-items: center;
+        gap: 8px;
+        width: calc(50% - 4px);
+        min-width: 0;
+        /* Room below for the level, which hangs off the corner of the avatar. */
+        padding: 6px 4px 8px 4px;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .player.big {
+        width: 100%;
+        min-height: 88px;
+        gap: 12px;
+        padding: 12px 16px 14px 16px;
+        border-radius: var(--ha-card-border-radius, 12px);
+      }
+
+      /* Everything but the pictures sits above them. */
+      .avatar-wrap,
+      .details {
+        position: relative;
+        z-index: 1;
+      }
+
+      .avatar-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        line-height: 0;
+      }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        object-fit: cover;
+        display: block;
+        box-shadow: 0 0 0 2px var(--ring, var(--steam-offline));
+      }
+
+      .avatar-blank {
+        background: var(--secondary-background-color);
+      }
+
+      .big .avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 10px;
+      }
+
+      /* The level sits in the corner of the avatar and grows with the number. */
+      .level {
+        position: absolute;
+        right: -4px;
+        bottom: -6px;
+        min-width: 14px;
+        height: 16px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        border-radius: 8px;
+        border: 1px solid var(--ring, var(--steam-offline));
+        background: var(--card-background-color, var(--ha-card-background, #fff));
+        color: var(--primary-text-color);
+        font-size: 10px;
+        line-height: 14px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .big .level {
+        height: 18px;
+        min-width: 18px;
+        border-radius: 9px;
+        font-size: 11px;
+        line-height: 16px;
+      }
+
+      .details {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .name {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .big .name {
+        font-size: 18px;
+      }
+
+      .seen {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .game {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        font-size: 12px;
+        width: fit-content;
+        max-width: 100%;
+      }
+
+      .big .game {
+        font-size: 14px;
+        margin-top: 2px;
+      }
+
+      .game-icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        flex: 0 0 auto;
+      }
+
+      .big .game-icon {
+        width: 20px;
+        height: 20px;
+      }
+
+      .game-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .game.clickable:hover .game-name {
+        text-decoration: underline;
+      }
+
+      /* The game's picture lies behind the row, fading out towards the names. */
+      .row-picture {
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        width: 60%;
+        object-fit: cover;
+        opacity: 0.35;
+        z-index: 0;
+        mask-image: linear-gradient(to right, transparent, black 85%);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 85%);
+      }
+
+      .big-picture {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.28;
+        z-index: 0;
+        mask-image: linear-gradient(to right, transparent, black 60%);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 60%);
+      }
+
+      /* The Steam logo stands in for the picture when a player is in no game. */
+      /* The box is a div, because an inline svg has no size of its own to position by. */
+      .steam-game-default-bg {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        /* Wider and taller than the drawing needs, with room at the right, so it never touches the edges. */
+        height: 50%;
+        width: min(50%, 190px);
+        padding-right: 25px;
+        box-sizing: border-box;
+        opacity: 0.15;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      .steam-logo {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: var(--primary-text-color);
+      }
+
+      /* Each state colours the ring, and the offline players are greyed out. */
+      .online {
+        --ring: var(--steam-online);
+      }
+
+      .ingame {
+        --ring: var(--steam-ingame);
+      }
+
+      .busy {
+        --ring: var(--steam-busy);
+      }
+
+      .away {
+        --ring: var(--steam-away);
+      }
+
+      .snooze {
+        --ring: var(--steam-snooze);
+      }
+
+      .looking_to_play,
+      .looking_to_trade {
+        --ring: var(--steam-looking);
+      }
+
+      .offline,
+      .unavailable {
+        --ring: var(--steam-offline);
+      }
+
+      .offline .avatar,
+      .unavailable .avatar {
+        filter: grayscale(1);
+        opacity: 0.65;
+      }
+
+      .offline .name,
+      .unavailable .name {
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+
+      .not-found {
+        background-color: var(--warning-color, #ffa726);
+        color: var(--text-primary-color, #fff);
+        border-radius: 8px;
+        font-size: 14px;
+        padding: 8px;
       }
     `;
   }

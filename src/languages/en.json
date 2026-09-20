@@ -6,12 +6,16 @@
     "name": "Steam card compact",
     "last_seen": "Last seen {amount} {unit} ago",
     "in_state": "{state} for {amount} {unit}",
-    "entity_not_found": "Entity {entity} was not found."
+    "entity_not_found": "Entity {entity} was not found.",
+    "level": "Steam level {level}"
   },
   "statuses": {
     "online": "Online",
+    "busy": "Busy",
     "away": "Away",
     "snooze": "Snoozing",
+    "looking_to_play": "Looking to play",
+    "looking_to_trade": "Looking to trade",
     "offline": "Offline",
     "unavailable": "Unavailable"
   },
@@ -21,5 +25,19 @@
     "days": "days",
     "weeks": "weeks",
     "seconds": "s"
+  },
+  "editor": {
+    "entity": "Players",
+    "entity_helper": "The players to show. One player with the player layout draws the big card.",
+    "auto_populate": "Every player",
+    "auto_populate_helper": "Lists every sensor.steam_* entity instead of naming them.",
+    "title": "Title",
+    "layout": "Layout",
+    "layout_helper": "Automatic draws the big card when one player is named.",
+    "layout_auto": "Automatic",
+    "layout_list": "List",
+    "layout_player": "One player",
+    "game_background": "Game picture",
+    "game_background_helper": "Draws the game's picture behind the player."
   }
 }

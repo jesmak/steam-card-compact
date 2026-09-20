@@ -1,11 +1,39 @@
-import { STATUSES } from './const';
+import { STATUSES, STEAM_PREFIX } from './const';
 import type { HassEntity } from './hass';
 import type { NameOverride } from './types';
+
+/**
+ * Whether an entity is a Steam player.
+ *
+ * The integration doesn't always name them `sensor.steam_*`: a player added later is
+ * `sensor.<name>`. What they all have is Steam's own list of states, and a level and a
+ * time they were last online.
+ */
+export function isSteamPlayer(entity: HassEntity | undefined): boolean {
+  if (entity === undefined || !entity.entity_id.startsWith('sensor.')) {
+    return false;
+  }
+  if (entity.entity_id.startsWith(STEAM_PREFIX)) {
+    return true;
+  }
+  const options = entity.attributes.options;
+  if (Array.isArray(options) && options.includes('looking_to_trade')) {
+    return true;
+  }
+  return entity.attributes.level !== undefined && entity.attributes.last_online !== undefined;
+}
 
 /** What a player is called: the name the configuration gives, else the entity's own. */
 export function displayName(entity: HassEntity, overrides: NameOverride[] | undefined): string {
   const override = overrides?.find((item) => item?.entity === entity.entity_id)?.name;
   return override || String(entity.attributes.friendly_name ?? entity.entity_id);
+}
+
+/** The Steam players of an instance, by entity id. */
+export function steamPlayers(states: Record<string, HassEntity | undefined>): string[] {
+  return Object.keys(states)
+    .filter((id) => isSteamPlayer(states[id]))
+    .sort();
 }
 
 export function sortByName(entities: HassEntity[], overrides: NameOverride[] | undefined): HassEntity[] {

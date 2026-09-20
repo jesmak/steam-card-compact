@@ -15,30 +15,36 @@ Hey dude! Help me out for a couple of :beers: or a :coffee:!
 ## What is it?
 
 A custom card that shows Steam players: who is online, what they are playing, and how long ago the others were last
-seen. The list card puts two players per row to save vertical space, grouped by whether they are online, away,
-snoozing or offline. Given a single player, it draws a bigger card with their avatar, level and game instead.
+seen. The list puts two players per row to save vertical space, grouped by what they are doing, and each player can
+also be given a card of their own with their game behind them.
 
 It is a more compact take on [kb-steam-card](https://github.com/Kibibit/kb-steam-card) by Kibibit, which hadn't been
 updated in a few years. It fits a two column horizontal stack, and still looks right at full width.
 
-![The card](docs/images/card.png)
+![The list of players](docs/images/list.png)
+
+![One player](docs/images/player.png)
 
 The players come from Home Assistant's own [Steam
-integration](https://www.home-assistant.io/integrations/steam_online/), which creates a `sensor.steam_*` entity per
-player.
+integration](https://www.home-assistant.io/integrations/steam_online/), which creates a sensor per player.
 
 ## Options
 
-| Name              | Type           | Requirement  | Description                                                     | Default         |
-| ----------------- | -------------- | ------------ | --------------------------------------------------------------- | --------------- |
-| `type`            | string         | **Required** | `custom:steam-card-compact`                                     |                 |
-| `entity`          | string or list | **Required** | The player, or players, to show. One player draws the big card. |                 |
-| `auto_populate`   | boolean        | Optional     | List every `sensor.steam_*` entity instead of naming them       | `false`         |
-| `title`           | string         | Optional     | Shown at the top of the list card                               | `Steam Friends` |
-| `game_background` | boolean        | Optional     | Draw the game's header picture behind the player                | `true`          |
-| `name_overrides`  | list           | Optional     | Names to show instead of the entities' own, below               |                 |
+The card has a visual editor: add it from the card picker and choose the players. The options can also be written by
+hand.
 
-Either `entity` or `auto_populate` is needed.
+| Name              | Type           | Requirement  | Description                                             | Default         |
+| ----------------- | -------------- | ------------ | ------------------------------------------------------- | --------------- |
+| `type`            | string         | **Required** | `custom:steam-card-compact`                             |                 |
+| `entity`          | string or list | **Required** | The player, or players, to show                         |                 |
+| `auto_populate`   | boolean        | Optional     | Show every Steam player there is instead of naming them | `false`         |
+| `layout`          | string         | Optional     | `auto`, `list`, or `player` for one player's own card   | `auto`          |
+| `title`           | string         | Optional     | Shown at the top of the list                            | `Steam Friends` |
+| `game_background` | boolean        | Optional     | Draw the game's picture behind the player               | `true`          |
+| `name_overrides`  | list           | Optional     | Names to show instead of the entities' own, below       |                 |
+
+Either `entity` or `auto_populate` is needed. With `auto` the card draws one player's own card when a single player is
+named, and the list otherwise.
 
 | Name     | Type   | Requirement  | Description                     |
 | -------- | ------ | ------------ | ------------------------------- |
@@ -63,8 +69,18 @@ auto_populate: true
 
 ```yaml
 type: custom:steam-card-compact
+layout: player
 entity: sensor.steam_abc
 ```
+
+## What it shows
+
+Each player has their avatar, ringed in the colour of what they are doing: green in a game, blue online, red busy,
+yellow away, purple looking to play or trade, grey offline. Their Steam level sits in the corner of the avatar, and
+offline players are greyed out with the time they were last seen.
+
+A player in a game has its icon and name, and the game's picture behind them. Clicking the game opens it in the Steam
+store; clicking the player opens Home Assistant's own dialog for the sensor.
 
 ## How to install
 
@@ -84,8 +100,10 @@ entity: sensor.steam_abc
 
 ## Upgrading from 1.x
 
-Nothing needs to be done: the card keeps its configuration. A player whose entity is missing is now named on the card
-instead of breaking it, and a player seen less than a minute ago is written properly in seconds.
+Nothing needs to be done: the card keeps its configuration, and one named player still gets a card of their own.
+
+The card now has a visual editor, the layout can be chosen instead of following the number of players, and every state
+Steam reports has a group of its own.
 
 ## Development
 
@@ -102,7 +120,8 @@ the file HACS installs and is committed to the repository.
 | Path                        | What it contains                                    |
 | --------------------------- | --------------------------------------------------- |
 | `src/steam-card-compact.ts` | The card itself                                     |
-| `src/friends.ts`            | Naming, ordering and grouping the players           |
+| `src/editor.ts`             | The visual editor                                   |
+| `src/friends.ts`            | Finding, naming, ordering and grouping the players  |
 | `src/logo.ts`               | The Steam logo drawn behind a player without a game |
 | `src/localize.ts`           | The card's texts                                    |
 | `tests/`                    | Tests, run with vitest                              |

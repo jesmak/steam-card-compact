@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { avatarUrl, displayName, elapsed, groupByStatus, pairs, sortByName } from '../src/friends';
+import {
+  avatarUrl,
+  displayName,
+  elapsed,
+  groupByStatus,
+  isSteamPlayer,
+  pairs,
+  sortByName,
+  steamPlayers,
+} from '../src/friends';
 import type { HassEntity } from '../src/hass';
 
 function player(values: Partial<HassEntity> & { name?: string } = {}): HassEntity {
@@ -53,7 +62,7 @@ describe('grouping players', () => {
   });
 
   it('treats a state the card does not know as unavailable', () => {
-    expect(groupByStatus([player({ state: 'busy' })])).toHaveProperty('unavailable');
+    expect(groupByStatus([player({ state: 'confused' })])).toHaveProperty('unavailable');
   });
 
   it('lists two players per row', () => {
@@ -101,5 +110,42 @@ describe('the picture of a player', () => {
 
   it('is nothing when the player has none', () => {
     expect(avatarUrl(player())).toBeUndefined();
+  });
+});
+
+describe('finding the Steam players', () => {
+  const steam = (id: string, attributes: Record<string, unknown> = {}) => ({
+    entity_id: id,
+    state: 'online',
+    attributes,
+  });
+
+  it('knows a player named sensor.steam_*', () => {
+    expect(isSteamPlayer(steam('sensor.steam_abc'))).toBe(true);
+  });
+
+  it('knows a player the integration named after them, by what Steam reports', () => {
+    // The integration names a player added later sensor.<name>, with no steam_ in it.
+    expect(isSteamPlayer(steam('sensor.pok25', { options: ['offline', 'online', 'looking_to_trade'] }))).toBe(
+      true,
+    );
+    expect(
+      isSteamPlayer(steam('sensor.leetify', { level: 12, last_online: '2026-09-18T19:47:44+00:00' })),
+    ).toBe(true);
+  });
+
+  it('leaves everything else alone', () => {
+    expect(isSteamPlayer(steam('sensor.kitchen_temperature', { level: 3 }))).toBe(false);
+    expect(isSteamPlayer(steam('light.steam_room'))).toBe(false);
+    expect(isSteamPlayer(undefined)).toBe(false);
+  });
+
+  it('lists them in order', () => {
+    const states = {
+      'sensor.steam_abc': steam('sensor.steam_abc'),
+      'sensor.pok25': steam('sensor.pok25', { level: 12, last_online: '2026-09-18T19:47:44+00:00' }),
+      'sensor.kitchen': steam('sensor.kitchen'),
+    };
+    expect(steamPlayers(states)).toEqual(['sensor.pok25', 'sensor.steam_abc']);
   });
 });

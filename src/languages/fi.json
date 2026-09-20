@@ -6,12 +6,16 @@
     "name": "Steam card compact",
     "last_seen": "Nähty {amount} {unit} sitten",
     "in_state": "{state} viimeiset {amount} {unit}",
-    "entity_not_found": "Entiteettiä {entity} ei löydetty."
+    "entity_not_found": "Entiteettiä {entity} ei löydetty.",
+    "level": "Steam-taso {level}"
   },
   "statuses": {
     "online": "Paikalla",
+    "busy": "Varattu",
     "away": "Poissa",
     "snooze": "Toimeton",
+    "looking_to_play": "Etsii peliseuraa",
+    "looking_to_trade": "Haluaa vaihtaa",
     "offline": "Offline-tilassa",
     "unavailable": "Ei saatavilla"
   },
@@ -21,5 +25,19 @@
     "days": "pv",
     "weeks": "vko",
     "seconds": "s"
+  },
+  "editor": {
+    "entity": "Pelaajat",
+    "entity_helper": "Näytettävät pelaajat. Yksi pelaaja yhden pelaajan asettelulla piirtää ison kortin.",
+    "auto_populate": "Kaikki pelaajat",
+    "auto_populate_helper": "Listaa kaikki sensor.steam_*-entiteetit ilman että ne nimetään.",
+    "title": "Otsikko",
+    "layout": "Asettelu",
+    "layout_helper": "Automaattinen piirtää ison kortin, kun pelaajia on nimetty yksi.",
+    "layout_auto": "Automaattinen",
+    "layout_list": "Lista",
+    "layout_player": "Yksi pelaaja",
+    "game_background": "Pelin kuva",
+    "game_background_helper": "Piirtää pelin kuvan pelaajan taakse."
   }
 }
