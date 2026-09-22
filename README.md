@@ -2,9 +2,11 @@
 
 Home Assistant dashboard card that shows what your Steam friends are playing.
 
-[![GitHub Release][releases-shield]][releases]
-[![License][license-shield]](LICENSE)
-[![GitHub Activity][commits-shield]][commits]
+[![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases]
+
+[![HACS][hacs-shield]][hacs] [![Home Assistant][home-assistant-shield]][home-assistant] [![License][license-shield]](LICENSE)
+
+![Project Maintenance][maintenance-shield] [![GitHub Activity][commits-shield]][commits] [![Open bugs][bugs-shield]][bugs] [![Open enhancements][enhancements-shield]][enhancements]
 
 ## Support
 
@@ -92,8 +94,8 @@ store; clicking the player opens Home Assistant's own dialog for the sensor.
 
 ### Manually
 
-1. Download `steam-card-compact.js` from the latest release and copy it to the `config/www` folder of your Home
-   Assistant installation
+1. Take `dist/steam-card-compact.js` from the source code of the [latest release][releases] and copy it to the
+   `config/www` folder of your Home Assistant installation
 2. In Home Assistant settings, open dashboards, click the three dots at the top right and open resources
 3. Add a new resource with the path `/local/steam-card-compact.js` and type JavaScript
 4. Refresh your browser
@@ -131,8 +133,18 @@ the file HACS installs and is committed to the repository.
 - [@Kibibit](https://github.com/Kibibit) for [kb-steam-card](https://github.com/Kibibit/kb-steam-card), which this
   card started from.
 
+[releases-shield]: https://img.shields.io/github/release/jesmak/steam-card-compact.svg?style=for-the-badge
+[release-date-shield]: https://img.shields.io/github/release-date/jesmak/steam-card-compact?style=for-the-badge
+[releases]: https://github.com/jesmak/steam-card-compact/releases
+[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
+[hacs]: https://hacs.xyz/docs/faq/custom_repositories/
+[home-assistant-shield]: https://img.shields.io/badge/Home%20Assistant-visual%20editor%20%2F%20yaml-green.svg?style=for-the-badge
+[home-assistant]: https://www.home-assistant.io/
+[license-shield]: https://img.shields.io/github/license/jesmak/steam-card-compact.svg?style=for-the-badge
+[maintenance-shield]: https://img.shields.io/maintenance/yes/2026.svg?style=for-the-badge
 [commits-shield]: https://img.shields.io/github/commit-activity/y/jesmak/steam-card-compact.svg?style=for-the-badge
 [commits]: https://github.com/jesmak/steam-card-compact/commits/main
-[license-shield]: https://img.shields.io/github/license/jesmak/steam-card-compact.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/jesmak/steam-card-compact.svg?style=for-the-badge
-[releases]: https://github.com/jesmak/steam-card-compact/releases
+[bugs-shield]: https://img.shields.io/github/issues/jesmak/steam-card-compact/bug?style=for-the-badge&label=bugs&color=red
+[bugs]: https://github.com/jesmak/steam-card-compact/labels/bug
+[enhancements-shield]: https://img.shields.io/github/issues/jesmak/steam-card-compact/enhancement?style=for-the-badge&label=enhancements&color=blue
+[enhancements]: https://github.com/jesmak/steam-card-compact/labels/enhancement
