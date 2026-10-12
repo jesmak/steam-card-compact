@@ -1,5 +1,6 @@
 {
   "name": "Steam Card Compact",
   "render_readme": true,
-  "filename": "steam-card-compact.js"
+  "filename": "steam-card-compact.js",
+  "homeassistant": "2026.9.3"
 }
