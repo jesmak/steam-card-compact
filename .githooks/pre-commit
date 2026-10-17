@@ -1,0 +1,20 @@
+#!/bin/sh
+# Refuses a commit whose dist/ isn't what the staged sources build to, which CI would otherwise find only after the
+# push. It builds a copy of the index, so changes left unstaged count neither way.
+# Enabled once per clone: git config core.hooksPath .githooks
+git diff --cached --quiet -- src scripts package.json package-lock.json dist && exit 0
+[ -d node_modules ] || { echo "pre-commit: dependencies not installed, run: npm ci"; exit 1; }
+# node_modules is copied, not linked: a symlink would put its absolute path into the bundle's comments, and the build
+# would never match. Inside .git it is usually on the same disk, so the copy can be hard links.
+tmp=$(mktemp -d "$(git rev-parse --absolute-git-dir)/dist-check.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+git checkout-index --all --prefix="$tmp/"
+cp -al node_modules "$tmp/node_modules" 2>/dev/null || { rm -rf "$tmp/node_modules" && cp -R node_modules "$tmp/node_modules"; }
+(cd "$tmp" && node scripts/build.mjs >/dev/null 2>&1) || { echo "pre-commit: the staged sources don't build, run: npm run build"; exit 1; }
+failed=0
+for built in "$tmp"/dist/*; do
+    name=dist/${built##*/}
+    git show ":$name" 2>/dev/null | cmp -s - "$built" ||
+        { echo "pre-commit: $name isn't what the staged sources build to, run npm run build and commit it too"; failed=1; }
+done
+exit $failed
