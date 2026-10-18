@@ -1,4 +1,4 @@
-import type { LovelaceCardConfig } from "./hass";
+import type { ActionConfig, LovelaceCardConfig } from "./hass";
 
 /** `player` is the big card of one player, `list` the list, `auto` the list unless one player is named. */
 export type Layout = "auto" | "list" | "player";
@@ -8,11 +8,14 @@ export interface SteamCardCompactConfig extends LovelaceCardConfig {
     entity?: string | string[];
     layout?: Layout;
     title?: string;
-    /** Draws the header picture of the game behind the player. */
+    /** Draws the game's picture behind the player. */
     game_background?: boolean;
-    /** Lists every sensor.steam_* entity there is. */
+    /** Lists every Steam player there is. */
     auto_populate?: boolean;
     name_overrides?: NameOverride[];
+    tap_action?: ActionConfig;
+    hold_action?: ActionConfig;
+    double_tap_action?: ActionConfig;
 }
 
 export interface NameOverride {

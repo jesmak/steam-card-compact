@@ -1,8 +1,6 @@
 /**
- * The card's visual editor: the players, the layout, the title and the game
- * picture. Home Assistant provides ha-form and the selectors.
- *
- * `name_overrides` is left to YAML; the form would be a poor place for a list of pairs.
+ * The card's visual editor: the players, the layout, the title, the game picture, the names to show instead of
+ * the players' own, and what a tap, a hold and a double tap do. Home Assistant provides ha-form and the selectors.
  */
 import { LitElement, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
@@ -10,7 +8,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./hass";
 import { steamPlayers } from "./friends";
-import { browserLanguage, translate } from "./localize";
+import { languageOf, translate } from "./localize/localize";
 import type { SteamCardCompactConfig } from "./types";
 
 interface SchemaEntry {
@@ -19,12 +17,9 @@ interface SchemaEntry {
 
 const DEFAULTS: Record<string, unknown> = { layout: "auto", game_background: true, auto_populate: false };
 
-/** The Steam players there are, so the picker offers them and nothing else. */
-export function steamEntities(hass: HomeAssistant): string[] {
-    return steamPlayers(hass.states);
-}
-
 function schema(hass: HomeAssistant, text: (key: string) => string, autoPopulate: boolean) {
+    // The Steam players there are, so the pickers offer them and nothing else
+    const players = steamPlayers(hass);
     return [
         ...(autoPopulate
             ? []
@@ -33,7 +28,7 @@ function schema(hass: HomeAssistant, text: (key: string) => string, autoPopulate
                       name: "entity",
                       required: true,
                       selector: {
-                          entity: { multiple: true, domain: "sensor", include_entities: steamEntities(hass) },
+                          entity: { multiple: true, domain: "sensor", include_entities: players },
                       },
                   },
               ]),
@@ -53,6 +48,34 @@ function schema(hass: HomeAssistant, text: (key: string) => string, autoPopulate
         },
         { name: "title", selector: { text: {} } },
         { name: "game_background", selector: { boolean: {} } },
+        {
+            name: "name_overrides",
+            selector: {
+                object: {
+                    multiple: true,
+                    label_field: "name",
+                    description_field: "entity",
+                    fields: {
+                        entity: {
+                            label: text("editor.override_entity"),
+                            required: true,
+                            selector: { entity: { domain: "sensor", include_entities: players } },
+                        },
+                        name: { label: text("editor.override_name"), required: true, selector: { text: {} } },
+                    },
+                },
+            },
+        },
+        {
+            type: "expandable",
+            name: "interactions",
+            flatten: true,
+            schema: [
+                { name: "tap_action", selector: { ui_action: { default_action: "more-info" } } },
+                { name: "hold_action", selector: { ui_action: { default_action: "none" } } },
+                { name: "double_tap_action", selector: { ui_action: { default_action: "none" } } },
+            ],
+        },
     ];
 }
 
@@ -86,11 +109,12 @@ export class SteamCardCompactEditor extends LitElement {
     private valueChanged(event: CustomEvent<{ value: SteamCardCompactConfig }>): void {
         const config: SteamCardCompactConfig = { ...event.detail.value };
 
-        // One player is kept as a string, as it always was, and the list card keeps a list.
+        // One player is kept as a string, as it always was, for the big card. A configuration that was a list stays
+        // one, so a list of one player isn't turned into the big card by an edit of something else.
         if (Array.isArray(config.entity)) {
             if (config.entity.length === 0) {
                 delete config.entity;
-            } else if (config.entity.length === 1 && (config.layout ?? "auto") !== "list") {
+            } else if (config.entity.length === 1 && !Array.isArray(this.config.entity) && (config.layout ?? "auto") !== "list") {
                 config.entity = config.entity[0];
             }
         }
@@ -99,6 +123,9 @@ export class SteamCardCompactEditor extends LitElement {
         }
         if (!config.title) {
             delete config.title;
+        }
+        if (Array.isArray(config.name_overrides) && config.name_overrides.length === 0) {
+            delete config.name_overrides;
         }
         // The defaults are shown in the form but left out of the configuration, so it stays short.
         for (const [key, value] of Object.entries(DEFAULTS)) {
@@ -121,7 +148,7 @@ export class SteamCardCompactEditor extends LitElement {
     }
 
     private language(): string {
-        return this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
+        return languageOf(this.hass);
     }
 }
 

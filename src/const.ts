@@ -3,8 +3,18 @@ declare const __CARD_VERSION__: string;
 
 export const CARD_VERSION = __CARD_VERSION__;
 
-/** Players are grouped by state, in this order. Steam reports all of these. */
-export const STATUSES = ["online", "busy", "looking_to_play", "looking_to_trade", "away", "snooze", "offline", "unavailable"] as const;
+/** Players are grouped in this order: those in a game first, then by the state Steam reports. */
+export const STATUSES = [
+    "ingame",
+    "online",
+    "busy",
+    "looking_to_play",
+    "looking_to_trade",
+    "away",
+    "snooze",
+    "offline",
+    "unavailable",
+] as const;
 
 export const STEAM_PREFIX = "sensor.steam_";
 

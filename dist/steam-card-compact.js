@@ -1,4 +1,4 @@
-/*! steam-card-compact 2.0.0 | MIT License */
+/*! steam-card-compact 2.1.0 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -603,60 +603,215 @@ function r5(r6) {
   return n4({ ...r6, state: true, attribute: false });
 }
 
+// src/actions.ts
+var HOLD_MS = 500;
+var DOUBLE_TAP_MS = 250;
+function hasAction(action) {
+  return action !== void 0 && action.action !== "none";
+}
+function isTappable(config) {
+  return config.tap_action === void 0 || hasAction(config.tap_action);
+}
+var GestureDetector = class {
+  constructor(config, fire) {
+    this.config = config;
+    this.fire = fire;
+    this.held = false;
+  }
+  pointerDown(event) {
+    this.held = false;
+    clearTimeout(this.holdTimer);
+    if (event.button === 0 && hasAction(this.config()?.hold_action)) {
+      this.holdTimer = setTimeout(() => {
+        this.held = true;
+        this.fire("hold");
+      }, HOLD_MS);
+    }
+  }
+  pointerUp() {
+    clearTimeout(this.holdTimer);
+  }
+  click() {
+    if (this.held) {
+      this.held = false;
+      return;
+    }
+    if (!hasAction(this.config()?.double_tap_action)) {
+      this.fire("tap");
+      return;
+    }
+    if (this.tapTimer !== void 0) {
+      clearTimeout(this.tapTimer);
+      this.tapTimer = void 0;
+      this.fire("double_tap");
+      return;
+    }
+    this.tapTimer = setTimeout(() => {
+      this.tapTimer = void 0;
+      this.fire("tap");
+    }, DOUBLE_TAP_MS);
+  }
+  key(event) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this.fire("tap");
+    }
+  }
+  dispose() {
+    clearTimeout(this.holdTimer);
+    clearTimeout(this.tapTimer);
+    this.tapTimer = void 0;
+  }
+};
+
 // src/const.ts
-var CARD_VERSION = "2.0.0";
-var STATUSES = ["online", "busy", "looking_to_play", "looking_to_trade", "away", "snooze", "offline", "unavailable"];
+var CARD_VERSION = "2.1.0";
+var STATUSES = [
+  "ingame",
+  "online",
+  "busy",
+  "looking_to_play",
+  "looking_to_trade",
+  "away",
+  "snooze",
+  "offline",
+  "unavailable"
+];
 var STEAM_PREFIX = "sensor.steam_";
 var STORE_URL = "https://store.steampowered.com/app/";
 
 // src/friends.ts
-function isSteamPlayer(entity) {
+var PLATFORM = "steam_online";
+function isSteamPlayer(entity, entities) {
   if (entity === void 0 || !entity.entity_id.startsWith("sensor.")) {
     return false;
+  }
+  if (entities !== void 0) {
+    const entry = entities[entity.entity_id];
+    return entry?.platform === PLATFORM && entry.translation_key === "account";
   }
   if (entity.entity_id.startsWith(STEAM_PREFIX)) {
     return true;
   }
   const options = entity.attributes.options;
-  if (Array.isArray(options) && options.includes("looking_to_trade")) {
-    return true;
+  return Array.isArray(options) && options.includes("looking_to_trade");
+}
+function steamPlayers(hass) {
+  return Object.keys(hass.states).filter((id) => isSteamPlayer(hass.states[id], hass.entities)).sort();
+}
+var byDevice = /* @__PURE__ */ new WeakMap();
+function deviceEntries(entities, device) {
+  let index = byDevice.get(entities);
+  if (index === void 0) {
+    index = /* @__PURE__ */ new Map();
+    for (const entry of Object.values(entities)) {
+      if (entry?.device_id && entry.platform === PLATFORM) {
+        const entries = index.get(entry.device_id) ?? [];
+        entries.push(entry);
+        index.set(entry.device_id, entries);
+      }
+    }
+    byDevice.set(entities, index);
   }
-  return entity.attributes.level !== void 0 && entity.attributes.last_online !== void 0;
+  return index.get(device) ?? [];
+}
+function deviceEntityIds(hass, entityId) {
+  const device = hass.entities?.[entityId]?.device_id;
+  return hass.entities && device ? deviceEntries(hass.entities, device).map((entry) => entry.entity_id) : [entityId];
+}
+function siblings(hass, entityId) {
+  const found = /* @__PURE__ */ new Map();
+  const device = hass.entities?.[entityId]?.device_id;
+  if (!hass.entities || !device) {
+    return found;
+  }
+  for (const entry of deviceEntries(hass.entities, device)) {
+    const state = hass.states[entry.entity_id];
+    if (entry.translation_key && entry.entity_id !== entityId && state) {
+      found.set(entry.translation_key, state);
+    }
+  }
+  return found;
+}
+function known(value) {
+  if (value === void 0 || value === null || value === "" || value === "unknown" || value === "unavailable") {
+    return void 0;
+  }
+  return String(value);
+}
+function pictureOf(entity) {
+  return entity.state !== "unavailable" ? known(entity.attributes.entity_picture) : void 0;
+}
+function readPlayer(hass, entity) {
+  const own = siblings(hass, entity.entity_id);
+  const attributes = entity.attributes;
+  const playing = own.get("now_playing");
+  const levelSensor = own.get("level");
+  const lastOnlineSensor = own.get("last_online");
+  const game = playing ? known(playing.state) : known(attributes.game);
+  const image = (key, attribute) => {
+    const entity2 = own.get(key);
+    return entity2 ? pictureOf(entity2) : attribute ? known(attributes[attribute]) : void 0;
+  };
+  const player = {
+    entity,
+    level: levelSensor ? known(levelSensor.state) : known(attributes.level),
+    lastOnline: lastOnlineSensor ? known(lastOnlineSensor.state) : known(attributes.last_online)
+  };
+  if (game === void 0) {
+    return player;
+  }
+  return {
+    ...player,
+    game,
+    gameId: playing ? known(playing.attributes.app_id) : known(attributes.game_id),
+    gameIcon: playing ? known(playing.attributes.entity_picture) : known(attributes.game_icon),
+    gameSince: playing ? known(playing.last_changed) : void 0,
+    header: image("header_capsule", "game_image_header"),
+    main: image("main_capsule", "game_image_main"),
+    hero: image("library_hero"),
+    logo: image("library_logo")
+  };
 }
 function displayName(entity, overrides) {
   const override = overrides?.find((item) => item?.entity === entity.entity_id)?.name;
   return override || String(entity.attributes.friendly_name ?? entity.entity_id);
 }
-function steamPlayers(states) {
-  return Object.keys(states).filter((id) => isSteamPlayer(states[id])).sort();
+function sortByName(players, overrides) {
+  return [...players].sort((one, other) => displayName(one.entity, overrides).localeCompare(displayName(other.entity, overrides)));
 }
-function sortByName(entities, overrides) {
-  return [...entities].sort((one, other) => displayName(one, overrides).localeCompare(displayName(other, overrides)));
+function inGame(player) {
+  return player.game !== void 0 && player.entity.state !== "offline" && player.entity.state !== "unavailable";
 }
-function groupByStatus(entities) {
+function statusOf(player) {
+  const state = player.entity.state;
+  return STATUSES.includes(state) && state !== "ingame" ? state : "unavailable";
+}
+function groupByStatus(players) {
+  var _a;
   const groups = {};
-  for (const entity of entities) {
-    const status = STATUSES.includes(entity.state) ? entity.state : "unavailable";
-    (groups[status] ?? (groups[status] = [])).push(entity);
+  for (const player of players) {
+    (groups[_a = inGame(player) ? "ingame" : statusOf(player)] ?? (groups[_a] = [])).push(player);
   }
   return groups;
 }
-function pairs(entities) {
+function pairs(items) {
   const rows = [];
-  for (let index = 0; index < (entities?.length ?? 0); index += 2) {
-    rows.push(entities.slice(index, index + 2));
+  for (let index = 0; index < items.length; index += 2) {
+    rows.push(items.slice(index, index + 2));
   }
   return rows;
 }
+function moment(time) {
+  const value = time ? Date.parse(time) : NaN;
+  return Number.isNaN(value) ? void 0 : value;
+}
 function elapsed(time, now = Date.now()) {
-  if (time === void 0 || time === null || time === "") {
+  const since = moment(time);
+  if (since === void 0) {
     return void 0;
   }
-  const moment = typeof time === "number" ? time * 1e3 : Date.parse(String(time));
-  if (Number.isNaN(moment)) {
-    return void 0;
-  }
-  const seconds = Math.max(0, Math.floor((now - moment) / 1e3));
+  const seconds = Math.max(0, Math.floor((now - since) / 1e3));
   if (seconds < 60) {
     return { amount: seconds, unit: "seconds" };
   }
@@ -671,24 +826,35 @@ function elapsed(time, now = Date.now()) {
   }
   return { amount: Math.floor(seconds / 604800), unit: "weeks" };
 }
+function playTime(since, now = Date.now()) {
+  const start = moment(since);
+  if (start === void 0) {
+    return void 0;
+  }
+  const minutes = Math.max(0, Math.floor((now - start) / 6e4));
+  return { hours: Math.floor(minutes / 60), minutes: minutes % 60 };
+}
 function avatarUrl(entity) {
   const picture = entity.attributes.entity_picture;
   return typeof picture === "string" ? picture.replace("_medium", "_full") : void 0;
 }
 
-// src/languages/en.json
+// src/localize/languages/en.json
 var en_default = {
   common: {
-    version: "Version",
     invalid_configuration: "Invalid configuration",
     description: "A compact card to show Steam integrations",
     name: "Steam card compact",
     last_seen: "Last seen {amount} {unit} ago",
-    in_state: "{state} for {amount} {unit}",
     entity_not_found: "Entity {entity} was not found.",
-    level: "Steam level {level}"
+    level: "Steam level {level}",
+    title: "Steam friends",
+    minutes: "{minutes} min",
+    hours: "{hours} h",
+    hours_minutes: "{hours} h {minutes} min"
   },
   statuses: {
+    ingame: "In game",
     online: "Online",
     busy: "Busy",
     away: "Away",
@@ -703,37 +869,53 @@ var en_default = {
     hours: "h",
     days: "days",
     weeks: "weeks",
-    seconds: "s"
+    seconds: "s",
+    one_seconds: "s",
+    one_minutes: "min",
+    one_hours: "h",
+    one_days: "day",
+    one_weeks: "week"
   },
   editor: {
     entity: "Players",
-    entity_helper: "The players to show. One player with the player layout draws the big card.",
+    entity_helper: "The players to show. One player with the player layout shows the big card.",
     auto_populate: "Every player",
-    auto_populate_helper: "Lists every sensor.steam_* entity instead of naming them.",
+    auto_populate_helper: "Lists every Steam player there is without picking them one by one.",
     title: "Title",
     layout: "Layout",
-    layout_helper: "Automatic draws the big card when one player is named.",
+    layout_helper: "Automatic draws the big card when only one player is chosen.",
     layout_auto: "Automatic",
     layout_list: "List",
     layout_player: "One player",
     game_background: "Game picture",
-    game_background_helper: "Draws the game's picture behind the player."
+    game_background_helper: "Draws the game's picture behind the player.",
+    name_overrides: "Names",
+    name_overrides_helper: "Names to show instead of the players' own.",
+    override_entity: "Player",
+    override_name: "Name",
+    interactions: "Interactions",
+    tap_action: "Tap",
+    hold_action: "Hold",
+    double_tap_action: "Double tap"
   }
 };
 
-// src/languages/fi.json
+// src/localize/languages/fi.json
 var fi_default = {
   common: {
-    version: "Versio",
     invalid_configuration: "Virheellinen konfiguraatio",
     description: "Kompakti kortti Steam-integraation tietojen n\xE4ytt\xE4miseksi",
     name: "Steam card compact",
     last_seen: "N\xE4hty {amount} {unit} sitten",
-    in_state: "{state} viimeiset {amount} {unit}",
     entity_not_found: "Entiteetti\xE4 {entity} ei l\xF6ydetty.",
-    level: "Steam-taso {level}"
+    level: "Steam-taso {level}",
+    title: "Steam-kaverit",
+    minutes: "{minutes} min",
+    hours: "{hours} h",
+    hours_minutes: "{hours} h {minutes} min"
   },
   statuses: {
+    ingame: "Pelaamassa",
     online: "Paikalla",
     busy: "Varattu",
     away: "Poissa",
@@ -748,26 +930,43 @@ var fi_default = {
     hours: "h",
     days: "pv",
     weeks: "vko",
-    seconds: "s"
+    seconds: "s",
+    one_seconds: "s",
+    one_minutes: "min",
+    one_hours: "h",
+    one_days: "pv",
+    one_weeks: "vko"
   },
   editor: {
     entity: "Pelaajat",
-    entity_helper: "N\xE4ytett\xE4v\xE4t pelaajat. Yksi pelaaja yhden pelaajan asettelulla piirt\xE4\xE4 ison kortin.",
+    entity_helper: "N\xE4ytett\xE4v\xE4t pelaajat. Yksi pelaaja yhden pelaajan asettelulla n\xE4ytt\xE4\xE4 ison kortin.",
     auto_populate: "Kaikki pelaajat",
-    auto_populate_helper: "Listaa kaikki sensor.steam_*-entiteetit ilman ett\xE4 ne nimet\xE4\xE4n.",
+    auto_populate_helper: "Listaa kaikki Steam-pelaajat ilman ett\xE4 ne erikseen valitaan.",
     title: "Otsikko",
     layout: "Asettelu",
-    layout_helper: "Automaattinen piirt\xE4\xE4 ison kortin, kun pelaajia on nimetty yksi.",
+    layout_helper: "Automaattinen piirt\xE4\xE4 ison kortin, kun vain yksi pelaaja on valittu.",
     layout_auto: "Automaattinen",
     layout_list: "Lista",
     layout_player: "Yksi pelaaja",
     game_background: "Pelin kuva",
-    game_background_helper: "Piirt\xE4\xE4 pelin kuvan pelaajan taakse."
+    game_background_helper: "Piirt\xE4\xE4 pelin kuvan pelaajan taakse.",
+    name_overrides: "Nimet",
+    name_overrides_helper: "Nimet, jotka n\xE4ytet\xE4\xE4n pelaajien omien nimien sijaan.",
+    override_entity: "Pelaaja",
+    override_name: "Nimi",
+    interactions: "Toiminnot",
+    tap_action: "Napautus",
+    hold_action: "Pitk\xE4 painallus",
+    double_tap_action: "Kaksoisnapautus"
   }
 };
 
-// src/localize.ts
-var LANGUAGES = { en: en_default, fi: fi_default };
+// src/localize/localize.ts
+var FILES = { "./languages/en.json": en_default, "./languages/fi.json": fi_default };
+var LANGUAGES = Object.fromEntries(
+  Object.entries(FILES).map(([path, table]) => [path.replace(/^.*\/|\.json$/g, "").toLowerCase(), table])
+);
+var LANGUAGE_CODES = Object.keys(LANGUAGES).sort();
 function translate(language, key) {
   const code = (language ?? "en").split(/[-_]/)[0].toLowerCase();
   return read(LANGUAGES[code], key) ?? read(LANGUAGES.en, key) ?? key;
@@ -785,20 +984,21 @@ function read(table, key) {
 function browserLanguage() {
   return document.documentElement.lang || navigator.language || "en";
 }
+function languageOf(hass) {
+  return hass?.locale?.language ?? hass?.language ?? browserLanguage();
+}
 
 // src/editor.ts
 var DEFAULTS = { layout: "auto", game_background: true, auto_populate: false };
-function steamEntities(hass) {
-  return steamPlayers(hass.states);
-}
 function schema(hass, text, autoPopulate) {
+  const players = steamPlayers(hass);
   return [
     ...autoPopulate ? [] : [
       {
         name: "entity",
         required: true,
         selector: {
-          entity: { multiple: true, domain: "sensor", include_entities: steamEntities(hass) }
+          entity: { multiple: true, domain: "sensor", include_entities: players }
         }
       }
     ],
@@ -817,7 +1017,35 @@ function schema(hass, text, autoPopulate) {
       }
     },
     { name: "title", selector: { text: {} } },
-    { name: "game_background", selector: { boolean: {} } }
+    { name: "game_background", selector: { boolean: {} } },
+    {
+      name: "name_overrides",
+      selector: {
+        object: {
+          multiple: true,
+          label_field: "name",
+          description_field: "entity",
+          fields: {
+            entity: {
+              label: text("editor.override_entity"),
+              required: true,
+              selector: { entity: { domain: "sensor", include_entities: players } }
+            },
+            name: { label: text("editor.override_name"), required: true, selector: { text: {} } }
+          }
+        }
+      }
+    },
+    {
+      type: "expandable",
+      name: "interactions",
+      flatten: true,
+      schema: [
+        { name: "tap_action", selector: { ui_action: { default_action: "more-info" } } },
+        { name: "hold_action", selector: { ui_action: { default_action: "none" } } },
+        { name: "double_tap_action", selector: { ui_action: { default_action: "none" } } }
+      ]
+    }
   ];
 }
 var SteamCardCompactEditor = class extends i4 {
@@ -849,7 +1077,7 @@ var SteamCardCompactEditor = class extends i4 {
     if (Array.isArray(config.entity)) {
       if (config.entity.length === 0) {
         delete config.entity;
-      } else if (config.entity.length === 1 && (config.layout ?? "auto") !== "list") {
+      } else if (config.entity.length === 1 && !Array.isArray(this.config.entity) && (config.layout ?? "auto") !== "list") {
         config.entity = config.entity[0];
       }
     }
@@ -858,6 +1086,9 @@ var SteamCardCompactEditor = class extends i4 {
     }
     if (!config.title) {
       delete config.title;
+    }
+    if (Array.isArray(config.name_overrides) && config.name_overrides.length === 0) {
+      delete config.name_overrides;
     }
     for (const [key, value] of Object.entries(DEFAULTS)) {
       if (config[key] === value) {
@@ -875,7 +1106,7 @@ var SteamCardCompactEditor = class extends i4 {
     return helper === key ? void 0 : helper;
   }
   language() {
-    return this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
+    return languageOf(this.hass);
   }
 };
 __decorateClass([
@@ -960,12 +1191,17 @@ registry.customCards.push({
   preview: true
 });
 var SteamCardCompact = class extends i4 {
+  constructor() {
+    super(...arguments);
+    this.failed = /* @__PURE__ */ new Set();
+    this.gestures = /* @__PURE__ */ new Map();
+  }
   static getConfigElement() {
     return document.createElement("steam-card-compact-editor");
   }
   /** Offers every Steam player there is when the card is added from the picker. */
   static getStubConfig(hass) {
-    const players = steamPlayers(hass?.states ?? {});
+    const players = steamPlayers({ states: hass?.states ?? {}, entities: hass?.entities });
     return players.length > 0 ? { entity: players } : { auto_populate: true };
   }
   setConfig(config) {
@@ -981,15 +1217,30 @@ var SteamCardCompact = class extends i4 {
   getGridOptions() {
     return { columns: 12, rows: "auto", min_columns: 6 };
   }
+  // The times ("1 h 20 min", "seen 5 min ago") age while the sensors stay the same, so the card is drawn
+  // again every minute
+  connectedCallback() {
+    super.connectedCallback();
+    this.timer = setInterval(() => this.requestUpdate(), 6e4);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this.timer);
+    this.gestures.forEach((detector) => detector.dispose());
+    this.gestures.clear();
+  }
   shouldUpdate(changed) {
-    if (changed.has("config") || !this.config) {
+    if (!changed.has("hass") || changed.size > 1 || !this.config) {
       return true;
     }
     const previous = changed.get("hass");
-    if (!previous || this.config.auto_populate) {
+    if (!previous || !this.hass || previous.entities !== this.hass.entities || languageOf(previous) !== languageOf(this.hass)) {
       return true;
     }
-    return this.wanted().some((id) => previous.states[id] !== this.hass?.states[id]);
+    if (this.config.auto_populate && steamPlayers(previous).join() !== steamPlayers(this.hass).join()) {
+      return true;
+    }
+    return this.watched().some((id) => previous.states[id] !== this.hass?.states[id]);
   }
   /** The entity ids the card is meant to show. */
   wanted() {
@@ -997,10 +1248,15 @@ var SteamCardCompact = class extends i4 {
       return [];
     }
     if (this.config.auto_populate) {
-      return steamPlayers(this.hass.states);
+      return steamPlayers(this.hass);
     }
     const { entity } = this.config;
     return entity === void 0 ? [] : typeof entity === "string" ? [entity] : entity;
+  }
+  /** The players and the entities of their devices that the card reads: now playing, level and the pictures. */
+  watched() {
+    const hass = this.hass;
+    return hass ? this.wanted().flatMap((id) => deviceEntityIds(hass, id)) : [];
   }
   /** Whether one player gets the big card: asked for, or one named player with the automatic layout. */
   single() {
@@ -1017,125 +1273,179 @@ var SteamCardCompact = class extends i4 {
     if (!this.hass || !this.config) {
       return A;
     }
+    const hass = this.hass;
     const wanted = this.wanted();
-    const players = wanted.map((id) => this.hass?.states[id]).filter((entity) => entity !== void 0);
-    const missing = wanted.filter((id) => this.hass?.states[id] === void 0);
+    const players = wanted.map((id) => hass.states[id]).filter((entity) => entity !== void 0).map((entity) => readPlayer(hass, entity));
+    const missing = wanted.filter((id) => hass.states[id] === void 0);
     if (this.single()) {
-      return b2`<ha-card class="big-card"> ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])} </ha-card>`;
+      return b2`<ha-card class="big-card">${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}</ha-card>`;
     }
     return b2`<ha-card>${this.listCard(players, missing)}</ha-card>`;
   }
   listCard(players, missing) {
     const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
-    const rows = [b2`<div class="card-header">${this.config?.title || "Steam Friends"}</div>`];
+    const rows = [b2`<div class="card-header">${this.config?.title || this.text("common.title")}</div>`];
     for (const status of STATUSES) {
       const group = groups[status];
       if (!group || group.length === 0) {
         continue;
       }
       rows.push(b2`<div class="status-category">${this.text(`statuses.${status}`)}</div>`);
-      rows.push(...pairs(group).map((pair) => this.pairRow(pair)));
+      rows.push(...pairs(group).map((pair) => b2`<div class="user-row">${pair.map((player) => this.listPlayer(player))}</div>`));
     }
     rows.push(...missing.map((id) => this.notFound(id)));
     return rows;
   }
-  pairRow(pair) {
-    return b2`<div class="user-row">${pair.map((entity) => this.listPlayer(entity))}</div>`;
-  }
-  listPlayer(entity) {
-    const game = entity.attributes.game;
-    const header = entity.attributes.game_image_header;
-    return b2`
-            <div class="player clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
-                ${game && this.gameBackground && header ? b2`<img src="${String(header)}" class="row-picture" alt="" />` : A}
-                ${this.avatar(entity)}
+  listPlayer(player) {
+    const playing = inGame(player);
+    const header = player.header;
+    return this.target(
+      player,
+      "",
+      b2`
+                ${playing && this.gameBackground && header && !this.failed.has(header) ? b2`<img src=${header} class="row-picture" alt="" @error=${() => this.fail(header)} />` : A}
+                ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
-                    ${game ? this.gameLine(entity) : A}
-                    ${entity.state === "offline" ? b2`<div class="seen">${this.lastSeen(entity)}</div>` : A}
+                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
+                    ${playing ? this.gameLine(player) : A}
+                    ${player.entity.state === "offline" ? b2`<div class="seen">${this.lastSeen(player)}</div>` : A}
                 </div>
-            </div>
-        `;
+            `
+    );
   }
-  bigCard(entity) {
-    const game = entity.attributes.game;
-    const picture = entity.attributes.game_image_main ?? entity.attributes.game_image_header;
-    return b2`
-            <div class="player big clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
-                ${this.gameBackground ? game && picture ? b2`<img src="${String(picture)}" class="big-picture" alt="" />` : STEAM_LOGO : A}
-                ${this.avatar(entity)}
+  bigCard(player) {
+    const playing = inGame(player);
+    const state = player.entity.state === "offline" ? this.lastSeen(player) : this.text(`statuses.${statusOf(player)}`);
+    const logo = playing && this.gameBackground && player.hero && player.logo && !this.failed.has(player.hero) && !this.failed.has(player.logo);
+    return this.target(
+      player,
+      logo ? "big with-logo" : "big",
+      b2`
+                ${this.gameBackground ? playing ? this.gameArt(player) : STEAM_LOGO : A} ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
-                    <div class="seen">${this.inState(entity)}</div>
-                    ${game ? this.gameLine(entity) : A}
+                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
+                    <div class="seen">${state}</div>
+                    ${playing ? this.gameLine(player) : A}
                 </div>
-            </div>
-        `;
+            `
+    );
   }
-  /** The game, with its icon. Clicking it opens the game in the Steam store. */
-  gameLine(entity) {
-    const icon = entity.attributes.game_icon;
-    const id = entity.attributes.game_id;
-    return b2`
-            <div
-                class="game ${id ? "clickable" : ""}"
-                @click=${(event) => this.openStore(event, id)}
-                title="${String(entity.attributes.game ?? "")}"
-            >
-                ${icon ? b2`<img src="${String(icon)}" class="game-icon" alt="" />` : A}
-                <span class="game-name">${entity.attributes.game}</span>
-            </div>
-        `;
+  /**
+   * A player's box, answering a tap, a hold and a double tap through Home Assistant's own action handler with
+   * the player as the entity. A player that does nothing on a tap isn't offered as a button.
+   */
+  target(player, kind, body) {
+    const tappable = this.config !== void 0 && isTappable(this.config);
+    const gestures = this.gesturesFor(player.entity.entity_id);
+    return b2`<div
+            class="player ${kind} ${this.mood(player)}"
+            role=${tappable ? "button" : A}
+            tabindex=${tappable ? "0" : A}
+            @pointerdown=${(event) => gestures.pointerDown(event)}
+            @pointerup=${() => gestures.pointerUp()}
+            @pointercancel=${() => gestures.pointerUp()}
+            @pointerleave=${() => gestures.pointerUp()}
+            @click=${() => gestures.click()}
+            @keydown=${(event) => gestures.key(event)}
+        >
+            ${body}
+        </div>`;
+  }
+  gesturesFor(entity) {
+    let detector = this.gestures.get(entity);
+    if (!detector) {
+      detector = new GestureDetector(
+        () => this.config,
+        (gesture) => this.act(entity, gesture)
+      );
+      this.gestures.set(entity, detector);
+    }
+    return detector;
+  }
+  /**
+   * The game behind the big card: its wide hero picture, shaded under the text, with its logo at the right.
+   * A game without a hero picture gets its own picture dimmed, as before there were any.
+   */
+  gameArt(player) {
+    const { hero, logo } = player;
+    if (hero && !this.failed.has(hero)) {
+      return b2`
+                <img src=${hero} class="hero" alt="" @error=${() => this.fail(hero)} />
+                <div class="shade"></div>
+                ${logo && !this.failed.has(logo) ? b2`<img src=${logo} class="logo" alt="" @error=${() => this.fail(logo)} />` : A}
+            `;
+    }
+    const picture = player.main ?? player.header;
+    return picture && !this.failed.has(picture) ? b2`<img src=${picture} class="big-picture" alt="" @error=${() => this.fail(picture)} />` : A;
+  }
+  /** The game with its icon and how long it has been played. Its name opens the game in the Steam store. */
+  gameLine(player) {
+    const time = playTime(player.gameSince);
+    const name = player.gameId ? b2`<a
+                  class="game-name"
+                  href="${STORE_URL}${player.gameId}"
+                  target="_blank"
+                  rel="noreferrer"
+                  @click=${(event) => event.stopPropagation()}
+                  @pointerdown=${(event) => event.stopPropagation()}
+                  @keydown=${(event) => event.stopPropagation()}
+                  >${player.game}</a
+              >` : b2`<span class="game-name">${player.game}</span>`;
+    return b2`<div class="game">
+            ${player.gameIcon ? b2`<img src=${player.gameIcon} class="game-icon" alt="" />` : A}${name}
+            ${time ? b2`<span class="play-time">· ${this.duration(time)}</span>` : A}
+        </div>`;
   }
   /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */
-  avatar(entity) {
-    const picture = avatarUrl(entity);
-    const level = entity.attributes.level;
+  avatar(player) {
+    const picture = avatarUrl(player.entity);
     return b2`
             <div class="avatar-wrap">
-                ${picture ? b2`<img src="${picture}" class="avatar" alt="" />` : b2`<div class="avatar avatar-blank"></div>`}
-                ${level === void 0 || level === null ? A : b2`<span class="level" title="${this.text("common.level").replace("{level}", String(level))}"> ${level} </span>`}
+                ${picture ? b2`<img src=${picture} class="avatar" alt="" />` : b2`<div class="avatar avatar-blank"></div>`}
+                ${player.level === void 0 ? A : b2`<span class="level" title=${this.text("common.level", { level: player.level })}>${player.level}</span>`}
             </div>
         `;
   }
   /** The state the card draws a player in: in a game, or whatever Steam says. */
-  mood(entity) {
-    return entity.attributes.game && entity.state !== "offline" ? `${entity.state} ingame` : entity.state;
+  mood(player) {
+    return inGame(player) ? `${player.entity.state} ingame` : player.entity.state;
   }
   notFound(entityId) {
-    return b2`<div class="not-found">${this.text("common.entity_not_found").replace("{entity}", entityId ?? "")}</div>`;
+    return b2`<div class="not-found">${this.text("common.entity_not_found", { entity: entityId ?? "" })}</div>`;
   }
-  openMoreInfo(entity) {
-    const event = new Event("hass-more-info", { bubbles: true, composed: true });
-    event.detail = { entityId: entity.entity_id };
-    this.dispatchEvent(event);
+  fail(url) {
+    this.failed = new Set(this.failed).add(url);
   }
-  openStore(event, gameId) {
-    if (gameId === void 0 || gameId === null || gameId === "") {
-      return;
-    }
-    event.stopPropagation();
-    window.open(`${STORE_URL}${String(gameId)}`, "_blank", "noopener");
+  act(entity, gesture) {
+    const { tap_action, hold_action, double_tap_action } = this.config ?? {};
+    this.dispatchEvent(
+      new CustomEvent("hass-action", {
+        detail: { config: { entity, tap_action, hold_action, double_tap_action }, action: gesture },
+        bubbles: true,
+        composed: true
+      })
+    );
   }
-  /** "Last seen 5 min ago", or nothing when the player has no such time. */
-  lastSeen(entity) {
-    const since = elapsed(entity.attributes.last_online);
+  /** "Seen 5 min ago", or nothing when the player has no such time. */
+  lastSeen(player) {
+    const since = elapsed(player.lastOnline);
     if (!since) {
       return "";
     }
-    return this.text("common.last_seen").replace("{amount}", String(since.amount)).replace("{unit}", this.text(`time_units.${since.unit}`));
+    const unit = since.amount === 1 ? `time_units.one_${since.unit}` : `time_units.${since.unit}`;
+    return this.text("common.last_seen", { amount: String(since.amount), unit: this.text(unit) });
   }
-  /** "Offline for 3 days", or nothing when the player has no such time. */
-  inState(entity) {
-    const since = elapsed(entity.attributes.last_online);
-    if (!since) {
-      return this.text(`statuses.${entity.state}`);
+  duration(time) {
+    if (time.hours === 0) {
+      return this.text("common.minutes", { minutes: String(time.minutes) });
     }
-    return this.text("common.in_state").replace("{state}", this.text(`statuses.${entity.state}`)).replace("{amount}", String(since.amount)).replace("{unit}", this.text(`time_units.${since.unit}`));
+    return time.minutes === 0 ? this.text("common.hours", { hours: String(time.hours) }) : this.text("common.hours_minutes", { hours: String(time.hours), minutes: String(time.minutes) });
   }
-  text(key) {
-    const language = this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
-    return translate(language, key);
+  text(key, values = {}) {
+    return Object.entries(values).reduce(
+      (text, [name, value]) => text.replace(`{${name}}`, value),
+      translate(languageOf(this.hass), key)
+    );
   }
   static get styles() {
     return i`
@@ -1153,6 +1463,7 @@ var SteamCardCompact = class extends i4 {
             ha-card {
                 padding: 16px;
                 overflow: hidden;
+                container-type: inline-size;
             }
 
             /* The big card is all one player, so its picture reaches the edges. */
@@ -1164,10 +1475,7 @@ var SteamCardCompact = class extends i4 {
                 padding: 0 0 8px 0;
                 font-size: var(--ha-card-header-font-size, 24px);
                 line-height: 1.2;
-            }
-
-            .clickable {
-                cursor: pointer;
+                overflow-wrap: anywhere;
             }
 
             .status-category {
@@ -1189,10 +1497,31 @@ var SteamCardCompact = class extends i4 {
                 gap: 8px;
                 width: calc(50% - 4px);
                 min-width: 0;
+                box-sizing: border-box;
                 /* Room below for the level, which hangs off the corner of the avatar. */
                 padding: 6px 4px 8px 4px;
                 border-radius: 8px;
                 overflow: hidden;
+            }
+
+            .player[role="button"] {
+                cursor: pointer;
+            }
+
+            .player:focus-visible {
+                outline: 2px solid var(--primary-color);
+                outline-offset: -2px;
+            }
+
+            /* Narrow: one player a row, so a name and a game get the card's width instead of half of it */
+            @container (max-width: 400px) {
+                .user-row {
+                    flex-direction: column;
+                    gap: 0;
+                }
+                .user-row .player {
+                    width: 100%;
+                }
             }
 
             .player.big {
@@ -1207,11 +1536,10 @@ var SteamCardCompact = class extends i4 {
             .avatar-wrap,
             .details {
                 position: relative;
-                z-index: 1;
+                z-index: 2;
             }
 
             .avatar-wrap {
-                position: relative;
                 flex: 0 0 auto;
                 line-height: 0;
             }
@@ -1267,11 +1595,10 @@ var SteamCardCompact = class extends i4 {
                 flex: 1 1 auto;
             }
 
+            /* Names and games wrap rather than end in an ellipsis */
             .name {
                 font-weight: 600;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                overflow-wrap: anywhere;
             }
 
             .big .name {
@@ -1281,19 +1608,12 @@ var SteamCardCompact = class extends i4 {
             .seen {
                 font-size: 12px;
                 color: var(--secondary-text-color);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
             }
 
+            /* Inline, so the icon stays with the game's name and only the time wraps to a line of its own */
             .game {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                min-width: 0;
                 font-size: 12px;
-                width: fit-content;
-                max-width: 100%;
+                overflow-wrap: anywhere;
             }
 
             .big .game {
@@ -1305,22 +1625,30 @@ var SteamCardCompact = class extends i4 {
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                flex: 0 0 auto;
+                margin-right: 4px;
+                vertical-align: -3px;
             }
 
             .big .game-icon {
                 width: 20px;
                 height: 20px;
+                margin-right: 5px;
+                vertical-align: -5px;
             }
 
-            .game-name {
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+            a.game-name {
+                color: inherit;
+                text-decoration: none;
             }
 
-            .game.clickable:hover .game-name {
+            a.game-name:hover,
+            a.game-name:focus-visible {
                 text-decoration: underline;
+            }
+
+            .play-time {
+                color: var(--secondary-text-color);
+                white-space: nowrap;
             }
 
             /* The game's picture lies behind the row, fading out towards the names. */
@@ -1334,9 +1662,9 @@ var SteamCardCompact = class extends i4 {
                 opacity: 0.35;
                 z-index: 0;
                 mask-image: linear-gradient(to right, transparent, black 85%);
-                -webkit-mask-image: linear-gradient(to right, transparent, black 85%);
             }
 
+            /* A game without a hero picture: its own picture, dimmed and faded from the right */
             .big-picture {
                 position: absolute;
                 inset: 0;
@@ -1346,7 +1674,60 @@ var SteamCardCompact = class extends i4 {
                 opacity: 0.28;
                 z-index: 0;
                 mask-image: linear-gradient(to right, transparent, black 60%);
-                -webkit-mask-image: linear-gradient(to right, transparent, black 60%);
+            }
+
+            /* The hero picture across the card. The shade goes by pixels, not percent, so the text is always on
+               the card's own colour and the picture shows where the text ends */
+            .hero {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                object-position: 70% 40%;
+                z-index: 0;
+            }
+
+            .shade {
+                --shade-colour: var(--card-background-color, var(--ha-card-background, #fff));
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+                background: linear-gradient(
+                    to right,
+                    var(--shade-colour) 0,
+                    var(--shade-colour) 200px,
+                    color-mix(in srgb, var(--shade-colour) 70%, transparent) 290px,
+                    transparent 400px
+                );
+            }
+
+            .logo {
+                position: absolute;
+                z-index: 1;
+                right: 14px;
+                top: 50%;
+                transform: translateY(-50%);
+                height: 72%;
+                max-width: 38%;
+                object-fit: contain;
+                filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
+                pointer-events: none;
+            }
+
+            /* The text keeps clear of the logo, which may take up to 38% of the card */
+            .big.with-logo .details {
+                padding-right: calc(38cqw + 8px);
+            }
+
+            /* Narrow: the logo would sit on the name, which says the same */
+            @container (max-width: 360px) {
+                .logo {
+                    display: none;
+                }
+                .big.with-logo .details {
+                    padding-right: 0;
+                }
             }
 
             /* The Steam logo stands in for the picture when a player is in no game. */
@@ -1378,10 +1759,6 @@ var SteamCardCompact = class extends i4 {
                 --ring: var(--steam-online);
             }
 
-            .ingame {
-                --ring: var(--steam-ingame);
-            }
-
             .busy {
                 --ring: var(--steam-busy);
             }
@@ -1404,6 +1781,11 @@ var SteamCardCompact = class extends i4 {
                 --ring: var(--steam-offline);
             }
 
+            /* Last, so a player in a game is green whatever else Steam says they are, as in their group */
+            .ingame {
+                --ring: var(--steam-ingame);
+            }
+
             .offline .avatar,
             .unavailable .avatar {
                 filter: grayscale(1);
@@ -1422,6 +1804,7 @@ var SteamCardCompact = class extends i4 {
                 border-radius: 8px;
                 font-size: 14px;
                 padding: 8px;
+                overflow-wrap: anywhere;
             }
         `;
   }
@@ -1432,6 +1815,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], SteamCardCompact.prototype, "config", 2);
+__decorateClass([
+  r5()
+], SteamCardCompact.prototype, "failed", 2);
 SteamCardCompact = __decorateClass([
   t3("steam-card-compact")
 ], SteamCardCompact);

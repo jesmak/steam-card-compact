@@ -1,17 +1,33 @@
 /**
- * A dashboard card for Home Assistant's Steam integration: who is online, what
- * they are playing, and how long ago the rest were last seen. Several players
- * are listed two to a row; a single player can be given a bigger card of their own.
+ * A dashboard card for Home Assistant's Steam integration: who is in a game and for how long, who is online,
+ * and how long ago the rest were last seen. Several players are listed two to a row; a single player can be
+ * given a bigger card of their own, with their game's picture and logo behind them.
  */
 import { LitElement, css, html, nothing } from "lit";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+import { GestureDetector, isTappable } from "./actions";
+import type { Gesture } from "./actions";
 import { CARD_VERSION, STATUSES, STORE_URL } from "./const";
 import "./editor";
-import { avatarUrl, displayName, elapsed, groupByStatus, pairs, sortByName, steamPlayers } from "./friends";
+import {
+    avatarUrl,
+    deviceEntityIds,
+    displayName,
+    elapsed,
+    groupByStatus,
+    inGame,
+    pairs,
+    playTime,
+    readPlayer,
+    sortByName,
+    statusOf,
+    steamPlayers,
+} from "./friends";
+import type { Player } from "./friends";
 import type { HassEntity, HomeAssistant } from "./hass";
-import { browserLanguage, translate } from "./localize";
+import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
 import type { SteamCardCompactConfig } from "./types";
 
@@ -43,6 +59,10 @@ registry.customCards.push({
 export class SteamCardCompact extends LitElement {
     @property({ attribute: false }) public hass?: HomeAssistant;
     @state() private config?: SteamCardCompactConfig;
+    // Pictures that didn't load, so the card falls back instead of showing a broken one
+    @state() private failed = new Set<string>();
+    private readonly gestures = new Map<string, GestureDetector>();
+    private timer?: ReturnType<typeof setInterval>;
 
     public static getConfigElement(): HTMLElement {
         return document.createElement("steam-card-compact-editor");
@@ -50,7 +70,7 @@ export class SteamCardCompact extends LitElement {
 
     /** Offers every Steam player there is when the card is added from the picker. */
     public static getStubConfig(hass?: HomeAssistant): Record<string, unknown> {
-        const players = steamPlayers(hass?.states ?? {});
+        const players = steamPlayers({ states: hass?.states ?? {}, entities: hass?.entities });
         return players.length > 0 ? { entity: players } : { auto_populate: true };
     }
 
@@ -67,19 +87,37 @@ export class SteamCardCompact extends LitElement {
     }
 
     public getGridOptions(): Record<string, unknown> {
-        // A whole row either way: the big card's picture needs the width, and the list holds two players a row.
+        // A whole row by default: the big card's picture needs the width, and the list holds two players a row.
         return { columns: 12, rows: "auto", min_columns: 6 };
     }
 
+    // The times ("1 h 20 min", "seen 5 min ago") age while the sensors stay the same, so the card is drawn
+    // again every minute
+    public connectedCallback(): void {
+        super.connectedCallback();
+        this.timer = setInterval(() => this.requestUpdate(), 60_000);
+    }
+
+    public disconnectedCallback(): void {
+        super.disconnectedCallback();
+        clearInterval(this.timer);
+        this.gestures.forEach((detector) => detector.dispose());
+        this.gestures.clear();
+    }
+
     protected shouldUpdate(changed: PropertyValues): boolean {
-        if (changed.has("config") || !this.config) {
+        if (!changed.has("hass") || changed.size > 1 || !this.config) {
             return true;
         }
         const previous = changed.get("hass") as HomeAssistant | undefined;
-        if (!previous || this.config.auto_populate) {
+        if (!previous || !this.hass || previous.entities !== this.hass.entities || languageOf(previous) !== languageOf(this.hass)) {
             return true;
         }
-        return this.wanted().some((id) => previous.states[id] !== this.hass?.states[id]);
+        // With every player listed, a player who appears or goes away counts as a change too
+        if (this.config.auto_populate && steamPlayers(previous).join() !== steamPlayers(this.hass).join()) {
+            return true;
+        }
+        return this.watched().some((id) => previous.states[id] !== this.hass?.states[id]);
     }
 
     /** The entity ids the card is meant to show. */
@@ -88,10 +126,16 @@ export class SteamCardCompact extends LitElement {
             return [];
         }
         if (this.config.auto_populate) {
-            return steamPlayers(this.hass.states);
+            return steamPlayers(this.hass);
         }
         const { entity } = this.config;
         return entity === undefined ? [] : typeof entity === "string" ? [entity] : entity;
+    }
+
+    /** The players and the entities of their devices that the card reads: now playing, level and the pictures. */
+    private watched(): string[] {
+        const hass = this.hass;
+        return hass ? this.wanted().flatMap((id) => deviceEntityIds(hass, id)) : [];
     }
 
     /** Whether one player gets the big card: asked for, or one named player with the automatic layout. */
@@ -111,160 +155,216 @@ export class SteamCardCompact extends LitElement {
         if (!this.hass || !this.config) {
             return nothing;
         }
-
+        const hass = this.hass;
         const wanted = this.wanted();
-        const players = wanted.map((id) => this.hass?.states[id]).filter((entity): entity is HassEntity => entity !== undefined);
-        const missing = wanted.filter((id) => this.hass?.states[id] === undefined);
+        const players = wanted
+            .map((id) => hass.states[id])
+            .filter((entity): entity is HassEntity => entity !== undefined)
+            .map((entity) => readPlayer(hass, entity));
+        const missing = wanted.filter((id) => hass.states[id] === undefined);
 
         if (this.single()) {
-            return html`<ha-card class="big-card"> ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])} </ha-card>`;
+            return html`<ha-card class="big-card">${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}</ha-card>`;
         }
-
         return html`<ha-card>${this.listCard(players, missing)}</ha-card>`;
     }
 
-    private listCard(players: HassEntity[], missing: string[]): TemplateResult[] {
+    private listCard(players: Player[], missing: string[]): TemplateResult[] {
         const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
-
-        const rows: TemplateResult[] = [html`<div class="card-header">${this.config?.title || "Steam Friends"}</div>`];
+        const rows: TemplateResult[] = [html`<div class="card-header">${this.config?.title || this.text("common.title")}</div>`];
         for (const status of STATUSES) {
             const group = groups[status];
             if (!group || group.length === 0) {
                 continue;
             }
             rows.push(html`<div class="status-category">${this.text(`statuses.${status}`)}</div>`);
-            rows.push(...pairs(group).map((pair) => this.pairRow(pair)));
+            rows.push(...pairs(group).map((pair) => html`<div class="user-row">${pair.map((player) => this.listPlayer(player))}</div>`));
         }
         rows.push(...missing.map((id) => this.notFound(id)));
         return rows;
     }
 
-    private pairRow(pair: HassEntity[]): TemplateResult {
-        return html`<div class="user-row">${pair.map((entity) => this.listPlayer(entity))}</div>`;
-    }
-
-    private listPlayer(entity: HassEntity): TemplateResult {
-        const game = entity.attributes.game;
-        const header = entity.attributes.game_image_header;
-        return html`
-            <div class="player clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
-                ${game && this.gameBackground && header ? html`<img src="${String(header)}" class="row-picture" alt="" />` : nothing}
-                ${this.avatar(entity)}
-                <div class="details">
-                    <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
-                    ${game ? this.gameLine(entity) : nothing}
-                    ${entity.state === "offline" ? html`<div class="seen">${this.lastSeen(entity)}</div>` : nothing}
-                </div>
-            </div>
-        `;
-    }
-
-    private bigCard(entity: HassEntity): TemplateResult {
-        const game = entity.attributes.game;
-        const picture = entity.attributes.game_image_main ?? entity.attributes.game_image_header;
-        return html`
-            <div class="player big clickable ${this.mood(entity)}" @click=${() => this.openMoreInfo(entity)}>
+    private listPlayer(player: Player): TemplateResult {
+        const playing = inGame(player);
+        const header = player.header;
+        return this.target(
+            player,
+            "",
+            html`
                 ${
-                    this.gameBackground
-                        ? game && picture
-                            ? html`<img src="${String(picture)}" class="big-picture" alt="" />`
-                            : STEAM_LOGO
+                    playing && this.gameBackground && header && !this.failed.has(header)
+                        ? html`<img src=${header} class="row-picture" alt="" @error=${() => this.fail(header)} />`
                         : nothing
                 }
-                ${this.avatar(entity)}
+                ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(entity, this.config?.name_overrides)}</div>
-                    <div class="seen">${this.inState(entity)}</div>
-                    ${game ? this.gameLine(entity) : nothing}
+                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
+                    ${playing ? this.gameLine(player) : nothing}
+                    ${player.entity.state === "offline" ? html`<div class="seen">${this.lastSeen(player)}</div>` : nothing}
                 </div>
-            </div>
-        `;
+            `,
+        );
     }
 
-    /** The game, with its icon. Clicking it opens the game in the Steam store. */
-    private gameLine(entity: HassEntity): TemplateResult {
-        const icon = entity.attributes.game_icon;
-        const id = entity.attributes.game_id;
-        return html`
-            <div
-                class="game ${id ? "clickable" : ""}"
-                @click=${(event: Event) => this.openStore(event, id)}
-                title="${String(entity.attributes.game ?? "")}"
-            >
-                ${icon ? html`<img src="${String(icon)}" class="game-icon" alt="" />` : nothing}
-                <span class="game-name">${entity.attributes.game}</span>
-            </div>
-        `;
+    private bigCard(player: Player): TemplateResult {
+        const playing = inGame(player);
+        const state = player.entity.state === "offline" ? this.lastSeen(player) : this.text(`statuses.${statusOf(player)}`);
+        const logo =
+            playing && this.gameBackground && player.hero && player.logo && !this.failed.has(player.hero) && !this.failed.has(player.logo);
+        return this.target(
+            player,
+            logo ? "big with-logo" : "big",
+            html`
+                ${this.gameBackground ? (playing ? this.gameArt(player) : STEAM_LOGO) : nothing} ${this.avatar(player)}
+                <div class="details">
+                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
+                    <div class="seen">${state}</div>
+                    ${playing ? this.gameLine(player) : nothing}
+                </div>
+            `,
+        );
+    }
+
+    /**
+     * A player's box, answering a tap, a hold and a double tap through Home Assistant's own action handler with
+     * the player as the entity. A player that does nothing on a tap isn't offered as a button.
+     */
+    private target(player: Player, kind: string, body: TemplateResult): TemplateResult {
+        const tappable = this.config !== undefined && isTappable(this.config);
+        const gestures = this.gesturesFor(player.entity.entity_id);
+        return html`<div
+            class="player ${kind} ${this.mood(player)}"
+            role=${tappable ? "button" : nothing}
+            tabindex=${tappable ? "0" : nothing}
+            @pointerdown=${(event: PointerEvent) => gestures.pointerDown(event)}
+            @pointerup=${() => gestures.pointerUp()}
+            @pointercancel=${() => gestures.pointerUp()}
+            @pointerleave=${() => gestures.pointerUp()}
+            @click=${() => gestures.click()}
+            @keydown=${(event: KeyboardEvent) => gestures.key(event)}
+        >
+            ${body}
+        </div>`;
+    }
+
+    private gesturesFor(entity: string): GestureDetector {
+        let detector = this.gestures.get(entity);
+        if (!detector) {
+            detector = new GestureDetector(
+                () => this.config,
+                (gesture) => this.act(entity, gesture),
+            );
+            this.gestures.set(entity, detector);
+        }
+        return detector;
+    }
+
+    /**
+     * The game behind the big card: its wide hero picture, shaded under the text, with its logo at the right.
+     * A game without a hero picture gets its own picture dimmed, as before there were any.
+     */
+    private gameArt(player: Player): TemplateResult | typeof nothing {
+        const { hero, logo } = player;
+        if (hero && !this.failed.has(hero)) {
+            return html`
+                <img src=${hero} class="hero" alt="" @error=${() => this.fail(hero)} />
+                <div class="shade"></div>
+                ${logo && !this.failed.has(logo) ? html`<img src=${logo} class="logo" alt="" @error=${() => this.fail(logo)} />` : nothing}
+            `;
+        }
+        const picture = player.main ?? player.header;
+        return picture && !this.failed.has(picture)
+            ? html`<img src=${picture} class="big-picture" alt="" @error=${() => this.fail(picture)} />`
+            : nothing;
+    }
+
+    /** The game with its icon and how long it has been played. Its name opens the game in the Steam store. */
+    private gameLine(player: Player): TemplateResult {
+        const time = playTime(player.gameSince);
+        // The link keeps its own clicks and keys, so opening the store doesn't also fire the player's action
+        const name = player.gameId
+            ? html`<a
+                  class="game-name"
+                  href="${STORE_URL}${player.gameId}"
+                  target="_blank"
+                  rel="noreferrer"
+                  @click=${(event: Event) => event.stopPropagation()}
+                  @pointerdown=${(event: Event) => event.stopPropagation()}
+                  @keydown=${(event: Event) => event.stopPropagation()}
+                  >${player.game}</a
+              >`
+            : html`<span class="game-name">${player.game}</span>`;
+        return html`<div class="game">
+            ${player.gameIcon ? html`<img src=${player.gameIcon} class="game-icon" alt="" />` : nothing}${name}
+            ${time ? html`<span class="play-time">· ${this.duration(time)}</span>` : nothing}
+        </div>`;
     }
 
     /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */
-    private avatar(entity: HassEntity): TemplateResult {
-        const picture = avatarUrl(entity);
-        const level = entity.attributes.level;
+    private avatar(player: Player): TemplateResult {
+        const picture = avatarUrl(player.entity);
         return html`
             <div class="avatar-wrap">
-                ${picture ? html`<img src="${picture}" class="avatar" alt="" />` : html`<div class="avatar avatar-blank"></div>`}
+                ${picture ? html`<img src=${picture} class="avatar" alt="" />` : html`<div class="avatar avatar-blank"></div>`}
                 ${
-                    level === undefined || level === null
+                    player.level === undefined
                         ? nothing
-                        : html`<span class="level" title="${this.text("common.level").replace("{level}", String(level))}"> ${level} </span>`
+                        : html`<span class="level" title=${this.text("common.level", { level: player.level })}>${player.level}</span>`
                 }
             </div>
         `;
     }
 
     /** The state the card draws a player in: in a game, or whatever Steam says. */
-    private mood(entity: HassEntity): string {
-        return entity.attributes.game && entity.state !== "offline" ? `${entity.state} ingame` : entity.state;
+    private mood(player: Player): string {
+        return inGame(player) ? `${player.entity.state} ingame` : player.entity.state;
     }
 
     private notFound(entityId: string | undefined): TemplateResult {
-        return html`<div class="not-found">${this.text("common.entity_not_found").replace("{entity}", entityId ?? "")}</div>`;
+        return html`<div class="not-found">${this.text("common.entity_not_found", { entity: entityId ?? "" })}</div>`;
     }
 
-    private openMoreInfo(entity: HassEntity): void {
-        const event = new Event("hass-more-info", { bubbles: true, composed: true }) as Event & {
-            detail?: { entityId: string };
-        };
-        event.detail = { entityId: entity.entity_id };
-        this.dispatchEvent(event);
+    private fail(url: string): void {
+        this.failed = new Set(this.failed).add(url);
     }
 
-    private openStore(event: Event, gameId: unknown): void {
-        if (gameId === undefined || gameId === null || gameId === "") {
-            return;
-        }
-        // The player under the game opens more-info; the game opens the store instead.
-        event.stopPropagation();
-        window.open(`${STORE_URL}${String(gameId)}`, "_blank", "noopener");
+    private act(entity: string, gesture: Gesture): void {
+        const { tap_action, hold_action, double_tap_action } = this.config ?? {};
+        this.dispatchEvent(
+            new CustomEvent("hass-action", {
+                detail: { config: { entity, tap_action, hold_action, double_tap_action }, action: gesture },
+                bubbles: true,
+                composed: true,
+            }),
+        );
     }
 
-    /** "Last seen 5 min ago", or nothing when the player has no such time. */
-    private lastSeen(entity: HassEntity): string {
-        const since = elapsed(entity.attributes.last_online as string | number | undefined);
+    /** "Seen 5 min ago", or nothing when the player has no such time. */
+    private lastSeen(player: Player): string {
+        const since = elapsed(player.lastOnline);
         if (!since) {
             return "";
         }
-        return this.text("common.last_seen")
-            .replace("{amount}", String(since.amount))
-            .replace("{unit}", this.text(`time_units.${since.unit}`));
+        // "1 day", not "1 days": the units of one have texts of their own
+        const unit = since.amount === 1 ? `time_units.one_${since.unit}` : `time_units.${since.unit}`;
+        return this.text("common.last_seen", { amount: String(since.amount), unit: this.text(unit) });
     }
 
-    /** "Offline for 3 days", or nothing when the player has no such time. */
-    private inState(entity: HassEntity): string {
-        const since = elapsed(entity.attributes.last_online as string | number | undefined);
-        if (!since) {
-            return this.text(`statuses.${entity.state}`);
+    private duration(time: { hours: number; minutes: number }): string {
+        if (time.hours === 0) {
+            return this.text("common.minutes", { minutes: String(time.minutes) });
         }
-        return this.text("common.in_state")
-            .replace("{state}", this.text(`statuses.${entity.state}`))
-            .replace("{amount}", String(since.amount))
-            .replace("{unit}", this.text(`time_units.${since.unit}`));
+        // "2 h", not "2 h 0 min"
+        return time.minutes === 0
+            ? this.text("common.hours", { hours: String(time.hours) })
+            : this.text("common.hours_minutes", { hours: String(time.hours), minutes: String(time.minutes) });
     }
 
-    private text(key: string): string {
-        const language = this.hass?.locale?.language ?? this.hass?.language ?? browserLanguage();
-        return translate(language, key);
+    private text(key: string, values: Record<string, string> = {}): string {
+        return Object.entries(values).reduce(
+            (text, [name, value]) => text.replace(`{${name}}`, value),
+            translate(languageOf(this.hass), key),
+        );
     }
 
     static get styles(): CSSResultGroup {
@@ -283,6 +383,7 @@ export class SteamCardCompact extends LitElement {
             ha-card {
                 padding: 16px;
                 overflow: hidden;
+                container-type: inline-size;
             }
 
             /* The big card is all one player, so its picture reaches the edges. */
@@ -294,10 +395,7 @@ export class SteamCardCompact extends LitElement {
                 padding: 0 0 8px 0;
                 font-size: var(--ha-card-header-font-size, 24px);
                 line-height: 1.2;
-            }
-
-            .clickable {
-                cursor: pointer;
+                overflow-wrap: anywhere;
             }
 
             .status-category {
@@ -319,10 +417,31 @@ export class SteamCardCompact extends LitElement {
                 gap: 8px;
                 width: calc(50% - 4px);
                 min-width: 0;
+                box-sizing: border-box;
                 /* Room below for the level, which hangs off the corner of the avatar. */
                 padding: 6px 4px 8px 4px;
                 border-radius: 8px;
                 overflow: hidden;
+            }
+
+            .player[role="button"] {
+                cursor: pointer;
+            }
+
+            .player:focus-visible {
+                outline: 2px solid var(--primary-color);
+                outline-offset: -2px;
+            }
+
+            /* Narrow: one player a row, so a name and a game get the card's width instead of half of it */
+            @container (max-width: 400px) {
+                .user-row {
+                    flex-direction: column;
+                    gap: 0;
+                }
+                .user-row .player {
+                    width: 100%;
+                }
             }
 
             .player.big {
@@ -337,11 +456,10 @@ export class SteamCardCompact extends LitElement {
             .avatar-wrap,
             .details {
                 position: relative;
-                z-index: 1;
+                z-index: 2;
             }
 
             .avatar-wrap {
-                position: relative;
                 flex: 0 0 auto;
                 line-height: 0;
             }
@@ -397,11 +515,10 @@ export class SteamCardCompact extends LitElement {
                 flex: 1 1 auto;
             }
 
+            /* Names and games wrap rather than end in an ellipsis */
             .name {
                 font-weight: 600;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+                overflow-wrap: anywhere;
             }
 
             .big .name {
@@ -411,19 +528,12 @@ export class SteamCardCompact extends LitElement {
             .seen {
                 font-size: 12px;
                 color: var(--secondary-text-color);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
             }
 
+            /* Inline, so the icon stays with the game's name and only the time wraps to a line of its own */
             .game {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                min-width: 0;
                 font-size: 12px;
-                width: fit-content;
-                max-width: 100%;
+                overflow-wrap: anywhere;
             }
 
             .big .game {
@@ -435,22 +545,30 @@ export class SteamCardCompact extends LitElement {
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                flex: 0 0 auto;
+                margin-right: 4px;
+                vertical-align: -3px;
             }
 
             .big .game-icon {
                 width: 20px;
                 height: 20px;
+                margin-right: 5px;
+                vertical-align: -5px;
             }
 
-            .game-name {
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
+            a.game-name {
+                color: inherit;
+                text-decoration: none;
             }
 
-            .game.clickable:hover .game-name {
+            a.game-name:hover,
+            a.game-name:focus-visible {
                 text-decoration: underline;
+            }
+
+            .play-time {
+                color: var(--secondary-text-color);
+                white-space: nowrap;
             }
 
             /* The game's picture lies behind the row, fading out towards the names. */
@@ -464,9 +582,9 @@ export class SteamCardCompact extends LitElement {
                 opacity: 0.35;
                 z-index: 0;
                 mask-image: linear-gradient(to right, transparent, black 85%);
-                -webkit-mask-image: linear-gradient(to right, transparent, black 85%);
             }
 
+            /* A game without a hero picture: its own picture, dimmed and faded from the right */
             .big-picture {
                 position: absolute;
                 inset: 0;
@@ -476,7 +594,60 @@ export class SteamCardCompact extends LitElement {
                 opacity: 0.28;
                 z-index: 0;
                 mask-image: linear-gradient(to right, transparent, black 60%);
-                -webkit-mask-image: linear-gradient(to right, transparent, black 60%);
+            }
+
+            /* The hero picture across the card. The shade goes by pixels, not percent, so the text is always on
+               the card's own colour and the picture shows where the text ends */
+            .hero {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                object-position: 70% 40%;
+                z-index: 0;
+            }
+
+            .shade {
+                --shade-colour: var(--card-background-color, var(--ha-card-background, #fff));
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+                background: linear-gradient(
+                    to right,
+                    var(--shade-colour) 0,
+                    var(--shade-colour) 200px,
+                    color-mix(in srgb, var(--shade-colour) 70%, transparent) 290px,
+                    transparent 400px
+                );
+            }
+
+            .logo {
+                position: absolute;
+                z-index: 1;
+                right: 14px;
+                top: 50%;
+                transform: translateY(-50%);
+                height: 72%;
+                max-width: 38%;
+                object-fit: contain;
+                filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
+                pointer-events: none;
+            }
+
+            /* The text keeps clear of the logo, which may take up to 38% of the card */
+            .big.with-logo .details {
+                padding-right: calc(38cqw + 8px);
+            }
+
+            /* Narrow: the logo would sit on the name, which says the same */
+            @container (max-width: 360px) {
+                .logo {
+                    display: none;
+                }
+                .big.with-logo .details {
+                    padding-right: 0;
+                }
             }
 
             /* The Steam logo stands in for the picture when a player is in no game. */
@@ -508,10 +679,6 @@ export class SteamCardCompact extends LitElement {
                 --ring: var(--steam-online);
             }
 
-            .ingame {
-                --ring: var(--steam-ingame);
-            }
-
             .busy {
                 --ring: var(--steam-busy);
             }
@@ -534,6 +701,11 @@ export class SteamCardCompact extends LitElement {
                 --ring: var(--steam-offline);
             }
 
+            /* Last, so a player in a game is green whatever else Steam says they are, as in their group */
+            .ingame {
+                --ring: var(--steam-ingame);
+            }
+
             .offline .avatar,
             .unavailable .avatar {
                 filter: grayscale(1);
@@ -552,6 +724,7 @@ export class SteamCardCompact extends LitElement {
                 border-radius: 8px;
                 font-size: 14px;
                 padding: 8px;
+                overflow-wrap: anywhere;
             }
         `;
     }

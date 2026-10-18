@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { steamEntities } from "../src/editor";
+import "../src/editor";
 import type { SteamCardCompactEditor } from "../src/editor";
 import type { HassEntity, HomeAssistant } from "../src/hass";
 import type { SteamCardCompactConfig } from "../src/types";
@@ -52,13 +52,22 @@ beforeEach(() => {
 });
 
 describe("the visual editor", () => {
-    it("asks for the players, the layout, a title and the game picture", async () => {
+    it("asks for the players, the layout, a title, the game picture, the names and the actions", async () => {
         const names = form(await editor()).schema.map((entry) => entry.name);
-        expect(names).toEqual(["entity", "auto_populate", "layout", "title", "game_background"]);
+        expect(names).toEqual(["entity", "auto_populate", "layout", "title", "game_background", "name_overrides", "interactions"]);
+    });
+
+    it("asks for each name as a player and the name to show", async () => {
+        const overrides = form(await editor()).schema.find((entry) => entry.name === "name_overrides");
+        const object = (overrides?.selector as { object: { multiple: boolean; fields: Record<string, { selector: unknown }> } }).object;
+        expect(object.multiple).toBe(true);
+        expect(Object.keys(object.fields)).toEqual(["entity", "name"]);
+        expect(object.fields.entity.selector).toEqual({
+            entity: { domain: "sensor", include_entities: ["sensor.steam_abc", "sensor.steam_def"] },
+        });
     });
 
     it("offers the Steam players and nothing else", async () => {
-        expect(steamEntities(hass)).toEqual(["sensor.steam_abc", "sensor.steam_def"]);
         const [entity] = form(await editor()).schema;
         expect(entity.selector).toEqual({
             entity: {
@@ -79,10 +88,17 @@ describe("the visual editor", () => {
     });
 
     it("keeps one player as one player", async () => {
-        const element = await editor();
+        const element = await editor({ entity: "sensor.steam_abc" });
         const changes = changesOf(element);
-        change(element, { type: "custom:steam-card-compact", entity: ["sensor.steam_abc"] });
+        change(element, { type: "custom:steam-card-compact", entity: ["sensor.steam_abc"], title: "Mine" });
         expect(changes[0].entity).toBe("sensor.steam_abc");
+    });
+
+    it("keeps a list of one player a list when something else is edited", async () => {
+        const element = await editor({ entity: ["sensor.steam_abc"] });
+        const changes = changesOf(element);
+        change(element, { type: "custom:steam-card-compact", entity: ["sensor.steam_abc"], title: "Mine" });
+        expect(changes[0].entity).toEqual(["sensor.steam_abc"]);
     });
 
     it("keeps a list a list when the list layout is chosen", async () => {
@@ -102,6 +118,7 @@ describe("the visual editor", () => {
             game_background: true,
             auto_populate: false,
             title: "",
+            name_overrides: [],
         });
         expect(changes[0]).toEqual({
             type: "custom:steam-card-compact",

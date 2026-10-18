@@ -1,0 +1,569 @@
+{
+    "clock": "2026-10-14T20:00:00+03:00",
+    "files": [
+        "docs/screenshots/avatar-1.png",
+        "docs/screenshots/avatar-2.png",
+        "docs/screenshots/avatar-3.png",
+        "docs/screenshots/avatar-4.png",
+        "docs/screenshots/avatar-5.png",
+        "docs/screenshots/avatar-6.png",
+        "docs/screenshots/pines-hero.jpg",
+        "docs/screenshots/pines-logo.png",
+        "docs/screenshots/pines-header.jpg",
+        "docs/screenshots/pines-icon.jpg",
+        "docs/screenshots/courier-hero.jpg",
+        "docs/screenshots/courier-logo.png",
+        "docs/screenshots/courier-header.jpg",
+        "docs/screenshots/courier-icon.jpg"
+    ],
+    "states": {
+        "sensor.steam_nordicnomad": {
+            "state": "online",
+            "attributes": {
+                "friendly_name": "NordicNomad",
+                "entity_picture": "/local/avatar-2.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.nordicnomad_now_playing": {
+            "state": "Hollow Pines",
+            "attributes": {
+                "friendly_name": "NordicNomad Now playing",
+                "app_id": "100001",
+                "entity_picture": "/local/pines-icon.jpg"
+            },
+            "last_changed": "2026-10-14T15:40:00+00:00"
+        },
+        "sensor.nordicnomad_level": {
+            "state": "37",
+            "attributes": {
+                "friendly_name": "NordicNomad Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.nordicnomad_last_online": {
+            "state": "2026-10-14T06:12:00+00:00",
+            "attributes": {
+                "friendly_name": "NordicNomad Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.nordicnomad_library_hero": {
+            "state": "2026-10-14T15:40:00+00:00",
+            "attributes": {
+                "friendly_name": "NordicNomad library_hero",
+                "entity_picture": "/local/pines-hero.jpg"
+            }
+        },
+        "image.nordicnomad_library_logo": {
+            "state": "2026-10-14T15:40:00+00:00",
+            "attributes": {
+                "friendly_name": "NordicNomad library_logo",
+                "entity_picture": "/local/pines-logo.png"
+            }
+        },
+        "image.nordicnomad_header_capsule": {
+            "state": "2026-10-14T15:40:00+00:00",
+            "attributes": {
+                "friendly_name": "NordicNomad header_capsule",
+                "entity_picture": "/local/pines-header.jpg"
+            }
+        },
+        "sensor.steam_pixel_pirkko": {
+            "state": "away",
+            "attributes": {
+                "friendly_name": "pixel_pirkko",
+                "entity_picture": "/local/avatar-6.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.pixel_pirkko_now_playing": {
+            "state": "Star Courier",
+            "attributes": {
+                "friendly_name": "pixel_pirkko Now playing",
+                "app_id": "100002",
+                "entity_picture": "/local/courier-icon.jpg"
+            },
+            "last_changed": "2026-10-14T16:48:00+00:00"
+        },
+        "sensor.pixel_pirkko_level": {
+            "state": "112",
+            "attributes": {
+                "friendly_name": "pixel_pirkko Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.pixel_pirkko_last_online": {
+            "state": "2026-10-13T21:30:00+00:00",
+            "attributes": {
+                "friendly_name": "pixel_pirkko Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.pixel_pirkko_library_hero": {
+            "state": "2026-10-14T16:48:00+00:00",
+            "attributes": {
+                "friendly_name": "pixel_pirkko library_hero",
+                "entity_picture": "/local/courier-hero.jpg"
+            }
+        },
+        "image.pixel_pirkko_library_logo": {
+            "state": "2026-10-14T16:48:00+00:00",
+            "attributes": {
+                "friendly_name": "pixel_pirkko library_logo",
+                "entity_picture": "/local/courier-logo.png"
+            }
+        },
+        "image.pixel_pirkko_header_capsule": {
+            "state": "2026-10-14T16:48:00+00:00",
+            "attributes": {
+                "friendly_name": "pixel_pirkko header_capsule",
+                "entity_picture": "/local/courier-header.jpg"
+            }
+        },
+        "sensor.steam_kalle": {
+            "state": "online",
+            "attributes": {
+                "friendly_name": "Kalle",
+                "entity_picture": "/local/avatar-3.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.kalle_now_playing": {
+            "state": "unknown",
+            "attributes": {
+                "friendly_name": "Kalle Now playing",
+                "app_id": null
+            }
+        },
+        "sensor.kalle_level": {
+            "state": "8",
+            "attributes": {
+                "friendly_name": "Kalle Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.kalle_last_online": {
+            "state": "2026-10-14T09:00:00+00:00",
+            "attributes": {
+                "friendly_name": "Kalle Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.kalle_library_hero": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Kalle library_hero"
+            }
+        },
+        "image.kalle_library_logo": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Kalle library_logo"
+            }
+        },
+        "image.kalle_header_capsule": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Kalle header_capsule"
+            }
+        },
+        "sensor.steam_frosty": {
+            "state": "snooze",
+            "attributes": {
+                "friendly_name": "frosty",
+                "entity_picture": "/local/avatar-4.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.frosty_now_playing": {
+            "state": "unknown",
+            "attributes": {
+                "friendly_name": "frosty Now playing",
+                "app_id": null
+            }
+        },
+        "sensor.frosty_level": {
+            "state": "21",
+            "attributes": {
+                "friendly_name": "frosty Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.frosty_last_online": {
+            "state": "2026-10-13T19:00:00+00:00",
+            "attributes": {
+                "friendly_name": "frosty Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.frosty_library_hero": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "frosty library_hero"
+            }
+        },
+        "image.frosty_library_logo": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "frosty library_logo"
+            }
+        },
+        "image.frosty_header_capsule": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "frosty header_capsule"
+            }
+        },
+        "sensor.steam_liisa": {
+            "state": "offline",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki",
+                "entity_picture": "/local/avatar-5.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.liisa_now_playing": {
+            "state": "unknown",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki Now playing",
+                "app_id": null
+            }
+        },
+        "sensor.liisa_level": {
+            "state": "54",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.liisa_last_online": {
+            "state": "2026-10-14T06:00:00+00:00",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.liisa_library_hero": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki library_hero"
+            }
+        },
+        "image.liisa_library_logo": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki library_logo"
+            }
+        },
+        "image.liisa_header_capsule": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Liisa Esimerkki header_capsule"
+            }
+        },
+        "sensor.steam_tuomas": {
+            "state": "offline",
+            "attributes": {
+                "friendly_name": "Tuomas",
+                "entity_picture": "/local/avatar-1.png",
+                "device_class": "enum",
+                "options": ["offline", "online", "busy", "away", "snooze", "looking_to_trade", "looking_to_play"]
+            }
+        },
+        "sensor.tuomas_now_playing": {
+            "state": "unknown",
+            "attributes": {
+                "friendly_name": "Tuomas Now playing",
+                "app_id": null
+            }
+        },
+        "sensor.tuomas_level": {
+            "state": "15",
+            "attributes": {
+                "friendly_name": "Tuomas Level",
+                "state_class": "measurement"
+            }
+        },
+        "sensor.tuomas_last_online": {
+            "state": "2026-10-12T17:00:00+00:00",
+            "attributes": {
+                "friendly_name": "Tuomas Last online",
+                "device_class": "timestamp"
+            }
+        },
+        "image.tuomas_library_hero": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Tuomas library_hero"
+            }
+        },
+        "image.tuomas_library_logo": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Tuomas library_logo"
+            }
+        },
+        "image.tuomas_header_capsule": {
+            "state": "unavailable",
+            "attributes": {
+                "friendly_name": "Tuomas header_capsule"
+            }
+        }
+    },
+    "entities": {
+        "sensor.steam_nordicnomad": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.nordicnomad_now_playing": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.nordicnomad_level": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.nordicnomad_last_online": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.nordicnomad_library_hero": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.nordicnomad_library_logo": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.nordicnomad_header_capsule": {
+            "device_id": "nordicnomad",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        },
+        "sensor.steam_pixel_pirkko": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.pixel_pirkko_now_playing": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.pixel_pirkko_level": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.pixel_pirkko_last_online": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.pixel_pirkko_library_hero": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.pixel_pirkko_library_logo": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.pixel_pirkko_header_capsule": {
+            "device_id": "pixel_pirkko",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        },
+        "sensor.steam_kalle": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.kalle_now_playing": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.kalle_level": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.kalle_last_online": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.kalle_library_hero": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.kalle_library_logo": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.kalle_header_capsule": {
+            "device_id": "kalle",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        },
+        "sensor.steam_frosty": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.frosty_now_playing": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.frosty_level": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.frosty_last_online": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.frosty_library_hero": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.frosty_library_logo": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.frosty_header_capsule": {
+            "device_id": "frosty",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        },
+        "sensor.steam_liisa": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.liisa_now_playing": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.liisa_level": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.liisa_last_online": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.liisa_library_hero": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.liisa_library_logo": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.liisa_header_capsule": {
+            "device_id": "liisa",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        },
+        "sensor.steam_tuomas": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "account"
+        },
+        "sensor.tuomas_now_playing": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "now_playing"
+        },
+        "sensor.tuomas_level": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "level"
+        },
+        "sensor.tuomas_last_online": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "last_online"
+        },
+        "image.tuomas_library_hero": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "library_hero"
+        },
+        "image.tuomas_library_logo": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "library_logo"
+        },
+        "image.tuomas_header_capsule": {
+            "device_id": "tuomas",
+            "platform": "steam_online",
+            "translation_key": "header_capsule"
+        }
+    },
+    "devices": {
+        "nordicnomad": {
+            "name": "NordicNomad"
+        },
+        "pixel_pirkko": {
+            "name": "pixel_pirkko"
+        },
+        "kalle": {
+            "name": "Kalle"
+        },
+        "frosty": {
+            "name": "frosty"
+        },
+        "liisa": {
+            "name": "Liisa Esimerkki"
+        },
+        "tuomas": {
+            "name": "Tuomas"
+        }
+    },
+    "shots": [
+        {
+            "name": "list",
+            "width": 500,
+            "card": {
+                "type": "custom:steam-card-compact",
+                "auto_populate": true
+            }
+        },
+        {
+            "name": "player",
+            "width": 500,
+            "card": {
+                "type": "custom:steam-card-compact",
+                "entity": "sensor.steam_nordicnomad"
+            }
+        }
+    ]
+}

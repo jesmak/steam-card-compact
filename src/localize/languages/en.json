@@ -1,0 +1,59 @@
+{
+    "common": {
+        "invalid_configuration": "Invalid configuration",
+        "description": "A compact card to show Steam integrations",
+        "name": "Steam card compact",
+        "last_seen": "Last seen {amount} {unit} ago",
+        "entity_not_found": "Entity {entity} was not found.",
+        "level": "Steam level {level}",
+        "title": "Steam friends",
+        "minutes": "{minutes} min",
+        "hours": "{hours} h",
+        "hours_minutes": "{hours} h {minutes} min"
+    },
+    "statuses": {
+        "ingame": "In game",
+        "online": "Online",
+        "busy": "Busy",
+        "away": "Away",
+        "snooze": "Snoozing",
+        "looking_to_play": "Looking to play",
+        "looking_to_trade": "Looking to trade",
+        "offline": "Offline",
+        "unavailable": "Unavailable"
+    },
+    "time_units": {
+        "minutes": "min",
+        "hours": "h",
+        "days": "days",
+        "weeks": "weeks",
+        "seconds": "s",
+        "one_seconds": "s",
+        "one_minutes": "min",
+        "one_hours": "h",
+        "one_days": "day",
+        "one_weeks": "week"
+    },
+    "editor": {
+        "entity": "Players",
+        "entity_helper": "The players to show. One player with the player layout shows the big card.",
+        "auto_populate": "Every player",
+        "auto_populate_helper": "Lists every Steam player there is without picking them one by one.",
+        "title": "Title",
+        "layout": "Layout",
+        "layout_helper": "Automatic draws the big card when only one player is chosen.",
+        "layout_auto": "Automatic",
+        "layout_list": "List",
+        "layout_player": "One player",
+        "game_background": "Game picture",
+        "game_background_helper": "Draws the game's picture behind the player.",
+        "name_overrides": "Names",
+        "name_overrides_helper": "Names to show instead of the players' own.",
+        "override_entity": "Player",
+        "override_name": "Name",
+        "interactions": "Interactions",
+        "tap_action": "Tap",
+        "hold_action": "Hold",
+        "double_tap_action": "Double tap"
+    }
+}

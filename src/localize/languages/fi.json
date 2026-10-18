@@ -1,0 +1,59 @@
+{
+    "common": {
+        "invalid_configuration": "Virheellinen konfiguraatio",
+        "description": "Kompakti kortti Steam-integraation tietojen näyttämiseksi",
+        "name": "Steam card compact",
+        "last_seen": "Nähty {amount} {unit} sitten",
+        "entity_not_found": "Entiteettiä {entity} ei löydetty.",
+        "level": "Steam-taso {level}",
+        "title": "Steam-kaverit",
+        "minutes": "{minutes} min",
+        "hours": "{hours} h",
+        "hours_minutes": "{hours} h {minutes} min"
+    },
+    "statuses": {
+        "ingame": "Pelaamassa",
+        "online": "Paikalla",
+        "busy": "Varattu",
+        "away": "Poissa",
+        "snooze": "Toimeton",
+        "looking_to_play": "Etsii peliseuraa",
+        "looking_to_trade": "Haluaa vaihtaa",
+        "offline": "Offline-tilassa",
+        "unavailable": "Ei saatavilla"
+    },
+    "time_units": {
+        "minutes": "min",
+        "hours": "h",
+        "days": "pv",
+        "weeks": "vko",
+        "seconds": "s",
+        "one_seconds": "s",
+        "one_minutes": "min",
+        "one_hours": "h",
+        "one_days": "pv",
+        "one_weeks": "vko"
+    },
+    "editor": {
+        "entity": "Pelaajat",
+        "entity_helper": "Näytettävät pelaajat. Yksi pelaaja yhden pelaajan asettelulla näyttää ison kortin.",
+        "auto_populate": "Kaikki pelaajat",
+        "auto_populate_helper": "Listaa kaikki Steam-pelaajat ilman että ne erikseen valitaan.",
+        "title": "Otsikko",
+        "layout": "Asettelu",
+        "layout_helper": "Automaattinen piirtää ison kortin, kun vain yksi pelaaja on valittu.",
+        "layout_auto": "Automaattinen",
+        "layout_list": "Lista",
+        "layout_player": "Yksi pelaaja",
+        "game_background": "Pelin kuva",
+        "game_background_helper": "Piirtää pelin kuvan pelaajan taakse.",
+        "name_overrides": "Nimet",
+        "name_overrides_helper": "Nimet, jotka näytetään pelaajien omien nimien sijaan.",
+        "override_entity": "Pelaaja",
+        "override_name": "Nimi",
+        "interactions": "Toiminnot",
+        "tap_action": "Napautus",
+        "hold_action": "Pitkä painallus",
+        "double_tap_action": "Kaksoisnapautus"
+    }
+}
