@@ -1,43 +1,43 @@
 {
-  "name": "steam-card-compact",
-  "version": "2.0.0",
-  "description": "Home Assistant dashboard card that shows what your Steam friends are playing",
-  "keywords": [
-    "home-assistant",
-    "homeassistant",
-    "hass",
-    "lovelace",
-    "custom-cards",
-    "steam"
-  ],
-  "type": "module",
-  "private": true,
-  "license": "MIT",
-  "repository": "git@github.com:jesmak/steam-card-compact.git",
-  "engines": {
-    "node": ">=22.13"
-  },
-  "scripts": {
-    "build": "node scripts/build.mjs",
-    "typecheck": "tsc",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build"
-  },
-  "dependencies": {
-    "lit": "^3.3.3"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "esbuild": "^0.28.2",
-    "eslint": "^10.10.0",
-    "happy-dom": "^20.0.0",
-    "prettier": "^3.9.6",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.0"
-  }
+    "name": "steam-card-compact",
+    "version": "2.0.0",
+    "description": "Home Assistant dashboard card that shows what your Steam friends are playing",
+    "keywords": [
+        "home-assistant",
+        "homeassistant",
+        "hass",
+        "lovelace",
+        "custom-cards",
+        "steam"
+    ],
+    "type": "module",
+    "private": true,
+    "license": "MIT",
+    "repository": "git@github.com:jesmak/steam-card-compact.git",
+    "engines": {
+        "node": ">=22.13"
+    },
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "typecheck": "tsc",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build"
+    },
+    "dependencies": {
+        "lit": "^3.3.3"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "esbuild": "^0.28.2",
+        "eslint": "^10.10.0",
+        "happy-dom": "^20.0.0",
+        "prettier": "^3.9.6",
+        "typescript": "~6.0.3",
+        "typescript-eslint": "^8.70.0",
+        "vitest": "^5.0.0"
+    }
 }
