@@ -1577,9 +1577,11 @@ var SteamCardCompact = class extends i4 {
                 background: var(--card-background-color, var(--ha-card-background, #fff));
                 color: var(--primary-text-color);
                 font-size: 10px;
-                line-height: 14px;
                 text-align: center;
                 font-variant-numeric: tabular-nums;
+                /* The digits are centred by their own height, not the line's, with the baseline on a whole pixel */
+                text-box: trim-both cap alphabetic;
+                padding-top: calc(11px - 1cap);
             }
 
             .big .level {
@@ -1587,7 +1589,7 @@ var SteamCardCompact = class extends i4 {
                 min-width: 18px;
                 border-radius: 9px;
                 font-size: 11px;
-                line-height: 16px;
+                padding-top: calc(12px - 1cap);
             }
 
             .details {
@@ -1647,7 +1649,6 @@ var SteamCardCompact = class extends i4 {
             }
 
             .play-time {
-                color: var(--secondary-text-color);
                 white-space: nowrap;
             }
 
@@ -1662,6 +1663,15 @@ var SteamCardCompact = class extends i4 {
                 opacity: 0.35;
                 z-index: 0;
                 mask-image: linear-gradient(to right, transparent, black 85%);
+            }
+
+            /* A glow in the card's colour keeps the text readable over the picture's own lettering */
+            .row-picture ~ .details {
+                --halo: var(--card-background-color, var(--ha-card-background, #fff));
+                text-shadow:
+                    0 0 2px var(--halo),
+                    0 0 4px var(--halo),
+                    0 0 8px var(--halo);
             }
 
             /* A game without a hero picture: its own picture, dimmed and faded from the right */
