@@ -1,4 +1,4 @@
-/*! steam-card-compact 2.1.0 | MIT License */
+/*! steam-card-compact 2.1.1 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -665,7 +665,7 @@ var GestureDetector = class {
 };
 
 // src/const.ts
-var CARD_VERSION = "2.1.0";
+var CARD_VERSION = "2.1.1";
 var STATUSES = [
   "ingame",
   "online",

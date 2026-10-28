@@ -1,6 +1,6 @@
 {
     "name": "steam-card-compact",
-    "version": "2.1.0",
+    "version": "2.1.1",
     "description": "Home Assistant dashboard card that shows what your Steam friends are playing",
     "keywords": [
         "home-assistant",
