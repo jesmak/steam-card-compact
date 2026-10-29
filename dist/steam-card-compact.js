@@ -732,13 +732,15 @@ function heightData(config) {
   return { ...config, height_mode: heightMode(config) };
 }
 function tidyHeight(config) {
+  const mode = heightMode(config);
   const tidied = { ...config };
-  for (const key of ["height", "max_height"]) {
-    if (!tidied[key]) {
-      delete tidied[key];
-    }
+  if (mode !== "fixed" || !tidied.height) {
+    delete tidied.height;
   }
-  if (!tidied.height_mode || heightMode({ ...tidied, height_mode: void 0 }) === tidied.height_mode) {
+  if (mode !== "max" || !tidied.max_height) {
+    delete tidied.max_height;
+  }
+  if (!tidied.height_mode || heightMode({ ...tidied, height_mode: void 0 }) === mode) {
     delete tidied.height_mode;
   }
   return tidied;

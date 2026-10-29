@@ -91,17 +91,20 @@ export function heightData<T extends HeightConfig>(config: T): T {
 }
 
 /**
- * Drops a mode the configuration would have anyway, so a config edited in the editor stays as short as one written by
- * hand. Both heights are kept, so switching modes back and forth loses neither.
+ * Keeps only the height the mode in force uses, so one left from another mode can't come back when the mode is switched
+ * again, and drops a mode the heights would give anyway, so a config edited in the editor stays as short as one written
+ * by hand. A mode whose height is being typed again stays.
  */
 export function tidyHeight<T extends HeightConfig>(config: T): T {
+    const mode = heightMode(config);
     const tidied = { ...config };
-    for (const key of ["height", "max_height"] as const) {
-        if (!tidied[key]) {
-            delete tidied[key];
-        }
+    if (mode !== "fixed" || !tidied.height) {
+        delete tidied.height;
     }
-    if (!tidied.height_mode || heightMode({ ...tidied, height_mode: undefined }) === tidied.height_mode) {
+    if (mode !== "max" || !tidied.max_height) {
+        delete tidied.max_height;
+    }
+    if (!tidied.height_mode || heightMode({ ...tidied, height_mode: undefined }) === mode) {
         delete tidied.height_mode;
     }
     return tidied;

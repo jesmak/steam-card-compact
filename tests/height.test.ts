@@ -103,15 +103,18 @@ describe("the card's height", () => {
         expect(validHeight(config)).toBe(valid);
     });
 
+    // The configuration keeps only the height the mode in force uses, so a height left from another mode can't come back
+    // when the mode is switched again, and the mode only when its heights don't already say it.
     it.each<[string, HeightConfig, HeightConfig]>([
         ["drops the auto mode with no heights", { height_mode: "auto" }, {}],
+        ["drops both heights in the auto mode", { height_mode: "auto", height: 240, max_height: 400 }, {}],
         ["drops the fixed mode its height implies", { height_mode: "fixed", height: 240 }, { height: 240 }],
-        ["keeps the auto mode over a height", { height_mode: "auto", height: 240 }, { height_mode: "auto", height: 240 }],
-        [
-            "keeps both heights in the max mode",
-            { height_mode: "max", height: 240, max_height: 400 },
-            { height_mode: "max", height: 240, max_height: 400 },
-        ],
+        ["drops the maximum height in the fixed mode", { height_mode: "fixed", height: 240, max_height: 400 }, { height: 240 }],
+        ["keeps the fixed mode while its height is emptied", { height_mode: "fixed", max_height: 400 }, { height_mode: "fixed" }],
+        ["drops the max mode its height implies", { height_mode: "max", max_height: 400 }, { max_height: 400 }],
+        ["drops the fixed height in the max mode", { height_mode: "max", height: 240, max_height: 400 }, { max_height: 400 }],
+        ["keeps the max mode while its height is emptied", { height_mode: "max", height: 240 }, { height_mode: "max" }],
+        ["keeps the fixed height of both, with no mode", { height: 240, max_height: 400 }, { height: 240 }],
         ["drops an emptied height", { height_mode: "max", height: undefined, max_height: 400 }, { max_height: 400 }],
         ["drops a height left empty", { height: null as unknown as number, max_height: 400 }, { max_height: 400 }],
         ["drops a mode left empty", { height_mode: null as unknown as HeightConfig["height_mode"], height: 240 }, { height: 240 }],
