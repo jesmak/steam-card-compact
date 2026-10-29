@@ -1,12 +1,13 @@
 /**
- * The card's visual editor: the players, the layout, the title, the game picture, the names to show instead of
- * the players' own, and what a tap, a hold and a double tap do. Home Assistant provides ha-form and the selectors.
+ * The card's visual editor: the players, the layout, the title, the game picture, the card's height, the names to
+ * show instead of the players' own, and what a tap, a hold and a double tap do. Home Assistant provides ha-form and the selectors.
  */
 import { LitElement, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./hass";
+import { heightData, heightSchema, tidyHeight } from "./height";
 import { steamPlayers } from "./friends";
 import { languageOf, translate } from "./localize/localize";
 import type { SteamCardCompactConfig } from "./types";
@@ -17,11 +18,11 @@ interface SchemaEntry {
 
 const DEFAULTS: Record<string, unknown> = { layout: "auto", game_background: true, auto_populate: false };
 
-function schema(hass: HomeAssistant, text: (key: string) => string, autoPopulate: boolean) {
+function schema(hass: HomeAssistant, config: SteamCardCompactConfig, text: (key: string) => string) {
     // The Steam players there are, so the pickers offer them and nothing else
     const players = steamPlayers(hass);
     return [
-        ...(autoPopulate
+        ...(config.auto_populate === true
             ? []
             : [
                   {
@@ -48,6 +49,7 @@ function schema(hass: HomeAssistant, text: (key: string) => string, autoPopulate
         },
         { name: "title", selector: { text: {} } },
         { name: "game_background", selector: { boolean: {} } },
+        ...heightSchema(config, text),
         {
             name: "name_overrides",
             selector: {
@@ -97,8 +99,8 @@ export class SteamCardCompactEditor extends LitElement {
         return html`
             <ha-form
                 .hass=${this.hass}
-                .data=${{ ...DEFAULTS, ...this.config, entity }}
-                .schema=${schema(this.hass, (key) => this.text(key), this.config.auto_populate === true)}
+                .data=${heightData({ ...DEFAULTS, ...this.config, entity })}
+                .schema=${schema(this.hass, this.config, (key) => this.text(key))}
                 .computeLabel=${(entry: SchemaEntry) => this.text(`editor.${entry.name}`)}
                 .computeHelper=${(entry: SchemaEntry) => this.helper(entry.name)}
                 @value-changed=${this.valueChanged}
@@ -107,7 +109,7 @@ export class SteamCardCompactEditor extends LitElement {
     }
 
     private valueChanged(event: CustomEvent<{ value: SteamCardCompactConfig }>): void {
-        const config: SteamCardCompactConfig = { ...event.detail.value };
+        const config: SteamCardCompactConfig = tidyHeight(event.detail.value);
 
         // One player is kept as a string, as it always was, for the big card. A configuration that was a list stays
         // one, so a list of one player isn't turned into the big card by an edit of something else.

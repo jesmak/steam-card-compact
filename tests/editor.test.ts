@@ -52,9 +52,18 @@ beforeEach(() => {
 });
 
 describe("the visual editor", () => {
-    it("asks for the players, the layout, a title, the game picture, the names and the actions", async () => {
+    it("asks for the players, the layout, a title, the game picture, the height, the names and the actions", async () => {
         const names = form(await editor()).schema.map((entry) => entry.name);
-        expect(names).toEqual(["entity", "auto_populate", "layout", "title", "game_background", "name_overrides", "interactions"]);
+        expect(names).toEqual([
+            "entity",
+            "auto_populate",
+            "layout",
+            "title",
+            "game_background",
+            "height_mode",
+            "name_overrides",
+            "interactions",
+        ]);
     });
 
     it("asks for each name as a player and the name to show", async () => {

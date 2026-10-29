@@ -11,6 +11,7 @@ import { GestureDetector, isTappable } from "./actions";
 import type { Gesture } from "./actions";
 import { CARD_VERSION, STATUSES, STORE_URL } from "./const";
 import "./editor";
+import { ScrollFade, fadeStyles } from "./fade";
 import {
     avatarUrl,
     deviceEntityIds,
@@ -27,6 +28,7 @@ import {
 } from "./friends";
 import type { Player } from "./friends";
 import type { HassEntity, HomeAssistant } from "./hass";
+import { gridMinRows, heightCardSize, heightStyle, validHeight } from "./height";
 import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
 import type { SteamCardCompactConfig } from "./types";
@@ -58,11 +60,18 @@ registry.customCards.push({
 @customElement("steam-card-compact")
 export class SteamCardCompact extends LitElement {
     @property({ attribute: false }) public hass?: HomeAssistant;
+    @property({ attribute: false }) public layout?: string;
     @state() private config?: SteamCardCompactConfig;
     // Pictures that didn't load, so the card falls back instead of showing a broken one
     @state() private failed = new Set<string>();
     private readonly gestures = new Map<string, GestureDetector>();
     private timer?: ReturnType<typeof setInterval>;
+
+    constructor() {
+        super();
+        // Fades the list's edges while the card is held to a height, through the card's own lifecycle.
+        new ScrollFade(this, () => (this.heightStyle() ? this.renderRoot.querySelectorAll<HTMLElement>(".list") : []));
+    }
 
     public static getConfigElement(): HTMLElement {
         return document.createElement("steam-card-compact-editor");
@@ -78,17 +87,27 @@ export class SteamCardCompact extends LitElement {
         if (!config || (config.auto_populate === undefined && config.entity === undefined)) {
             throw new Error(translate(browserLanguage(), "common.invalid_configuration"));
         }
+        if (!validHeight(config)) {
+            throw new Error(translate(browserLanguage(), "common.invalid_height"));
+        }
         this.config = { ...config };
     }
 
     public getCardSize(): number {
         const shown = this.wanted().length;
-        return this.single() ? 2 : 1 + Math.ceil(shown / 2);
+        return heightCardSize(this.config ?? {}, this.single() ? 2 : 1 + Math.ceil(shown / 2), this.minimumHeight());
     }
 
     public getGridOptions(): Record<string, unknown> {
         // A whole row by default: the big card's picture needs the width, and the list holds two players a row.
-        return { columns: 12, rows: "auto", min_columns: 6 };
+        return { columns: 12, rows: "auto", min_columns: 6, min_rows: gridMinRows(this.minimumHeight()) };
+    }
+
+    // The lowest the card goes when held to a height. The big card: its border and its player at their natural height,
+    // the 64 px avatar with its padding, as nothing in it scrolls. The list: its border and padding, the title, and the
+    // first status heading with one row of players under it.
+    private minimumHeight(): number {
+        return this.single() ? 2 + 26 + 64 : 2 + 32 + 37 + 31 + 54;
     }
 
     // The times ("1 h 20 min", "seen 5 min ago") age while the sensors stay the same, so the card is drawn
@@ -103,6 +122,10 @@ export class SteamCardCompact extends LitElement {
         clearInterval(this.timer);
         this.gestures.forEach((detector) => detector.dispose());
         this.gestures.clear();
+    }
+
+    private heightStyle(): string {
+        return heightStyle(this.config ?? {}, this.layout, this.minimumHeight());
     }
 
     protected shouldUpdate(changed: PropertyValues): boolean {
@@ -163,15 +186,21 @@ export class SteamCardCompact extends LitElement {
             .map((entity) => readPlayer(hass, entity));
         const missing = wanted.filter((id) => hass.states[id] === undefined);
 
+        const style = this.heightStyle();
         if (this.single()) {
-            return html`<ha-card class="big-card">${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}</ha-card>`;
+            return html`<ha-card class="big-card" style=${style}>
+                ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
+            </ha-card>`;
         }
-        return html`<ha-card>${this.listCard(players, missing)}</ha-card>`;
+        return html`<ha-card style=${style}>
+            <div class="card-header">${this.config?.title || this.text("common.title")}</div>
+            <div class="list">${this.listRows(players, missing)}</div>
+        </ha-card>`;
     }
 
-    private listCard(players: Player[], missing: string[]): TemplateResult[] {
+    private listRows(players: Player[], missing: string[]): TemplateResult[] {
         const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
-        const rows: TemplateResult[] = [html`<div class="card-header">${this.config?.title || this.text("common.title")}</div>`];
+        const rows: TemplateResult[] = [];
         for (const status of STATUSES) {
             const group = groups[status];
             if (!group || group.length === 0) {
@@ -368,375 +397,393 @@ export class SteamCardCompact extends LitElement {
     }
 
     static get styles(): CSSResultGroup {
-        return css`
-            /* The colour of each state, used for the ring around an avatar and its level. */
-            :host {
-                --steam-online: #57cbde;
-                --steam-ingame: #90ba3c;
-                --steam-busy: #d9544e;
-                --steam-away: #d6ca1c;
-                --steam-snooze: #4081e4;
-                --steam-looking: #c58ade;
-                --steam-offline: #8f98a0;
-            }
+        return [
+            css`
+                /* The colour of each state, used for the ring around an avatar and its level. */
+                :host {
+                    --steam-online: #57cbde;
+                    --steam-ingame: #90ba3c;
+                    --steam-busy: #d9544e;
+                    --steam-away: #d6ca1c;
+                    --steam-snooze: #4081e4;
+                    --steam-looking: #c58ade;
+                    --steam-offline: #8f98a0;
+                }
 
-            ha-card {
-                padding: 16px;
-                overflow: hidden;
-                container-type: inline-size;
-            }
-
-            /* The big card is all one player, so its picture reaches the edges. */
-            ha-card.big-card {
-                padding: 0;
-            }
-
-            .card-header {
-                padding: 0 0 8px 0;
-                font-size: var(--ha-card-header-font-size, 24px);
-                line-height: 1.2;
-                overflow-wrap: anywhere;
-            }
-
-            .status-category {
-                margin: 10px 0 5px 0;
-                font-size: 13px;
-                color: var(--secondary-text-color);
-            }
-
-            .user-row {
-                display: flex;
-                gap: 8px;
-            }
-
-            /* A row of the list holds half of it; the big card fills its own. */
-            .player {
-                position: relative;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                width: calc(50% - 4px);
-                min-width: 0;
-                box-sizing: border-box;
-                /* Room below for the level, which hangs off the corner of the avatar. */
-                padding: 6px 4px 8px 4px;
-                border-radius: 8px;
-                overflow: hidden;
-            }
-
-            .player[role="button"] {
-                cursor: pointer;
-            }
-
-            .player:focus-visible {
-                outline: 2px solid var(--primary-color);
-                outline-offset: -2px;
-            }
-
-            /* Narrow: one player a row, so a name and a game get the card's width instead of half of it */
-            @container (max-width: 400px) {
-                .user-row {
+                /* A column, so that with a height of its own the header stays put and the list scrolls. */
+                ha-card {
+                    box-sizing: border-box;
+                    display: flex;
                     flex-direction: column;
-                    gap: 0;
+                    padding: 16px;
+                    overflow: hidden;
+                    container-type: inline-size;
                 }
-                .user-row .player {
+
+                /* The big card is all one player, so its picture reaches the edges. */
+                ha-card.big-card {
+                    padding: 0;
+                }
+
+                .card-header {
+                    flex: none;
+                    padding: 0 0 8px 0;
+                    font-size: var(--ha-card-header-font-size, 24px);
+                    line-height: 1.2;
+                    overflow-wrap: anywhere;
+                }
+
+                .list {
+                    flex: 1 1 auto;
+                    min-height: 0;
+                    overflow-y: auto;
+                    overscroll-behavior: contain;
+                    scrollbar-width: thin;
+                }
+
+                .status-category {
+                    margin: 10px 0 5px 0;
+                    font-size: 13px;
+                    color: var(--secondary-text-color);
+                }
+
+                .user-row {
+                    display: flex;
+                    gap: 8px;
+                }
+
+                /* A row of the list holds half of it; the big card fills its own. */
+                .player {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    width: calc(50% - 4px);
+                    min-width: 0;
+                    box-sizing: border-box;
+                    /* Room below for the level, which hangs off the corner of the avatar. */
+                    padding: 6px 4px 8px 4px;
+                    border-radius: 8px;
+                    overflow: hidden;
+                }
+
+                .player[role="button"] {
+                    cursor: pointer;
+                }
+
+                .player:focus-visible {
+                    outline: 2px solid var(--primary-color);
+                    outline-offset: -2px;
+                }
+
+                /* Narrow: one player a row, so a name and a game get the card's width instead of half of it */
+                @container (max-width: 400px) {
+                    .user-row {
+                        flex-direction: column;
+                        gap: 0;
+                    }
+                    .user-row .player {
+                        width: 100%;
+                    }
+                }
+
+                /* With a height of its own, the big card's player and picture fill all of it. */
+                .player.big {
+                    flex: 1 1 auto;
                     width: 100%;
+                    min-height: 88px;
+                    gap: 12px;
+                    padding: 12px 16px 14px 16px;
+                    border-radius: var(--ha-card-border-radius, 12px);
                 }
-            }
 
-            .player.big {
-                width: 100%;
-                min-height: 88px;
-                gap: 12px;
-                padding: 12px 16px 14px 16px;
-                border-radius: var(--ha-card-border-radius, 12px);
-            }
+                /* Everything but the pictures sits above them. */
+                .avatar-wrap,
+                .details {
+                    position: relative;
+                    z-index: 2;
+                }
 
-            /* Everything but the pictures sits above them. */
-            .avatar-wrap,
-            .details {
-                position: relative;
-                z-index: 2;
-            }
+                .avatar-wrap {
+                    flex: 0 0 auto;
+                    line-height: 0;
+                }
 
-            .avatar-wrap {
-                flex: 0 0 auto;
-                line-height: 0;
-            }
+                .avatar {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 8px;
+                    object-fit: cover;
+                    display: block;
+                    box-shadow: 0 0 0 2px var(--ring, var(--steam-offline));
+                }
 
-            .avatar {
-                width: 40px;
-                height: 40px;
-                border-radius: 8px;
-                object-fit: cover;
-                display: block;
-                box-shadow: 0 0 0 2px var(--ring, var(--steam-offline));
-            }
+                .avatar-blank {
+                    background: var(--secondary-background-color);
+                }
 
-            .avatar-blank {
-                background: var(--secondary-background-color);
-            }
+                .big .avatar {
+                    width: 64px;
+                    height: 64px;
+                    border-radius: 10px;
+                }
 
-            .big .avatar {
-                width: 64px;
-                height: 64px;
-                border-radius: 10px;
-            }
+                /* The level sits in the corner of the avatar and grows with the number. */
+                .level {
+                    position: absolute;
+                    right: -4px;
+                    bottom: -6px;
+                    min-width: 14px;
+                    height: 16px;
+                    padding: 0 4px;
+                    box-sizing: border-box;
+                    border-radius: 8px;
+                    border: 1px solid var(--ring, var(--steam-offline));
+                    background: var(--card-background-color, var(--ha-card-background, #fff));
+                    color: var(--primary-text-color);
+                    font-size: 10px;
+                    text-align: center;
+                    font-variant-numeric: tabular-nums;
+                    /* The digits are centred by their own height, not the line's, with the baseline on a whole pixel */
+                    text-box: trim-both cap alphabetic;
+                    padding-top: calc(11px - 1cap);
+                }
 
-            /* The level sits in the corner of the avatar and grows with the number. */
-            .level {
-                position: absolute;
-                right: -4px;
-                bottom: -6px;
-                min-width: 14px;
-                height: 16px;
-                padding: 0 4px;
-                box-sizing: border-box;
-                border-radius: 8px;
-                border: 1px solid var(--ring, var(--steam-offline));
-                background: var(--card-background-color, var(--ha-card-background, #fff));
-                color: var(--primary-text-color);
-                font-size: 10px;
-                text-align: center;
-                font-variant-numeric: tabular-nums;
-                /* The digits are centred by their own height, not the line's, with the baseline on a whole pixel */
-                text-box: trim-both cap alphabetic;
-                padding-top: calc(11px - 1cap);
-            }
+                .big .level {
+                    height: 18px;
+                    min-width: 18px;
+                    border-radius: 9px;
+                    font-size: 11px;
+                    padding-top: calc(12px - 1cap);
+                }
 
-            .big .level {
-                height: 18px;
-                min-width: 18px;
-                border-radius: 9px;
-                font-size: 11px;
-                padding-top: calc(12px - 1cap);
-            }
+                .details {
+                    min-width: 0;
+                    flex: 1 1 auto;
+                }
 
-            .details {
-                min-width: 0;
-                flex: 1 1 auto;
-            }
+                /* Names and games wrap rather than end in an ellipsis */
+                .name {
+                    font-weight: 600;
+                    overflow-wrap: anywhere;
+                }
 
-            /* Names and games wrap rather than end in an ellipsis */
-            .name {
-                font-weight: 600;
-                overflow-wrap: anywhere;
-            }
+                .big .name {
+                    font-size: 18px;
+                }
 
-            .big .name {
-                font-size: 18px;
-            }
+                .seen {
+                    font-size: 12px;
+                    color: var(--secondary-text-color);
+                }
 
-            .seen {
-                font-size: 12px;
-                color: var(--secondary-text-color);
-            }
+                /* Inline, so the icon stays with the game's name and only the time wraps to a line of its own */
+                .game {
+                    font-size: 12px;
+                    overflow-wrap: anywhere;
+                }
 
-            /* Inline, so the icon stays with the game's name and only the time wraps to a line of its own */
-            .game {
-                font-size: 12px;
-                overflow-wrap: anywhere;
-            }
+                .big .game {
+                    font-size: 14px;
+                    margin-top: 2px;
+                }
 
-            .big .game {
-                font-size: 14px;
-                margin-top: 2px;
-            }
+                .game-icon {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    margin-right: 4px;
+                    vertical-align: -3px;
+                }
 
-            .game-icon {
-                width: 16px;
-                height: 16px;
-                border-radius: 3px;
-                margin-right: 4px;
-                vertical-align: -3px;
-            }
+                .big .game-icon {
+                    width: 20px;
+                    height: 20px;
+                    margin-right: 5px;
+                    vertical-align: -5px;
+                }
 
-            .big .game-icon {
-                width: 20px;
-                height: 20px;
-                margin-right: 5px;
-                vertical-align: -5px;
-            }
+                a.game-name {
+                    color: inherit;
+                    text-decoration: none;
+                }
 
-            a.game-name {
-                color: inherit;
-                text-decoration: none;
-            }
+                a.game-name:hover,
+                a.game-name:focus-visible {
+                    text-decoration: underline;
+                }
 
-            a.game-name:hover,
-            a.game-name:focus-visible {
-                text-decoration: underline;
-            }
+                .play-time {
+                    white-space: nowrap;
+                }
 
-            .play-time {
-                white-space: nowrap;
-            }
+                /* The game's picture lies behind the row, fading out towards the names. */
+                .row-picture {
+                    position: absolute;
+                    top: 0;
+                    right: 0;
+                    height: 100%;
+                    width: 60%;
+                    object-fit: cover;
+                    opacity: 0.35;
+                    z-index: 0;
+                    mask-image: linear-gradient(to right, transparent, black 85%);
+                }
 
-            /* The game's picture lies behind the row, fading out towards the names. */
-            .row-picture {
-                position: absolute;
-                top: 0;
-                right: 0;
-                height: 100%;
-                width: 60%;
-                object-fit: cover;
-                opacity: 0.35;
-                z-index: 0;
-                mask-image: linear-gradient(to right, transparent, black 85%);
-            }
+                /* A glow in the card's colour keeps the text readable over the picture's own lettering */
+                .row-picture ~ .details {
+                    --halo: var(--card-background-color, var(--ha-card-background, #fff));
+                    text-shadow:
+                        0 0 2px var(--halo),
+                        0 0 4px var(--halo),
+                        0 0 8px var(--halo);
+                }
 
-            /* A glow in the card's colour keeps the text readable over the picture's own lettering */
-            .row-picture ~ .details {
-                --halo: var(--card-background-color, var(--ha-card-background, #fff));
-                text-shadow:
-                    0 0 2px var(--halo),
-                    0 0 4px var(--halo),
-                    0 0 8px var(--halo);
-            }
+                /* A game without a hero picture: its own picture, dimmed and faded from the right */
+                .big-picture {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    opacity: 0.28;
+                    z-index: 0;
+                    mask-image: linear-gradient(to right, transparent, black 60%);
+                }
 
-            /* A game without a hero picture: its own picture, dimmed and faded from the right */
-            .big-picture {
-                position: absolute;
-                inset: 0;
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                opacity: 0.28;
-                z-index: 0;
-                mask-image: linear-gradient(to right, transparent, black 60%);
-            }
-
-            /* The hero picture across the card. The shade goes by pixels, not percent, so the text is always on
+                /* The hero picture across the card. The shade goes by pixels, not percent, so the text is always on
                the card's own colour and the picture shows where the text ends */
-            .hero {
-                position: absolute;
-                inset: 0;
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                object-position: 70% 40%;
-                z-index: 0;
-            }
+                .hero {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    object-position: 70% 40%;
+                    z-index: 0;
+                }
 
-            .shade {
-                --shade-colour: var(--card-background-color, var(--ha-card-background, #fff));
-                position: absolute;
-                inset: 0;
-                z-index: 1;
-                background: linear-gradient(
-                    to right,
-                    var(--shade-colour) 0,
-                    var(--shade-colour) 200px,
-                    color-mix(in srgb, var(--shade-colour) 70%, transparent) 290px,
-                    transparent 400px
-                );
-            }
+                .shade {
+                    --shade-colour: var(--card-background-color, var(--ha-card-background, #fff));
+                    position: absolute;
+                    inset: 0;
+                    z-index: 1;
+                    background: linear-gradient(
+                        to right,
+                        var(--shade-colour) 0,
+                        var(--shade-colour) 200px,
+                        color-mix(in srgb, var(--shade-colour) 70%, transparent) 290px,
+                        transparent 400px
+                    );
+                }
 
-            .logo {
-                position: absolute;
-                z-index: 1;
-                right: 14px;
-                top: 50%;
-                transform: translateY(-50%);
-                height: 72%;
-                max-width: 38%;
-                object-fit: contain;
-                filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
-                pointer-events: none;
-            }
-
-            /* The text keeps clear of the logo, which may take up to 38% of the card */
-            .big.with-logo .details {
-                padding-right: calc(38cqw + 8px);
-            }
-
-            /* Narrow: the logo would sit on the name, which says the same */
-            @container (max-width: 360px) {
                 .logo {
-                    display: none;
+                    position: absolute;
+                    z-index: 1;
+                    right: 14px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    height: 72%;
+                    max-width: 38%;
+                    object-fit: contain;
+                    filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.6));
+                    pointer-events: none;
                 }
+
+                /* The text keeps clear of the logo, which may take up to 38% of the card */
                 .big.with-logo .details {
-                    padding-right: 0;
+                    padding-right: calc(38cqw + 8px);
                 }
-            }
 
-            /* The Steam logo stands in for the picture when a player is in no game. */
-            /* The box is a div, because an inline svg has no size of its own to position by. */
-            .steam-game-default-bg {
-                position: absolute;
-                right: 20px;
-                top: 50%;
-                transform: translateY(-50%);
-                /* Wider and taller than the drawing needs, with room at the right, so it never touches the edges. */
-                height: 50%;
-                width: min(50%, 190px);
-                padding-right: 25px;
-                box-sizing: border-box;
-                opacity: 0.15;
-                z-index: 0;
-                pointer-events: none;
-            }
+                /* Narrow: the logo would sit on the name, which says the same */
+                @container (max-width: 360px) {
+                    .logo {
+                        display: none;
+                    }
+                    .big.with-logo .details {
+                        padding-right: 0;
+                    }
+                }
 
-            .steam-logo {
-                display: block;
-                width: 100%;
-                height: 100%;
-                fill: var(--primary-text-color);
-            }
+                /* The Steam logo stands in for the picture when a player is in no game. */
+                /* The box is a div, because an inline svg has no size of its own to position by. */
+                .steam-game-default-bg {
+                    position: absolute;
+                    right: 20px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    /* Wider and taller than the drawing needs, with room at the right, so it never touches the edges. */
+                    height: 50%;
+                    width: min(50%, 190px);
+                    padding-right: 25px;
+                    box-sizing: border-box;
+                    opacity: 0.15;
+                    z-index: 0;
+                    pointer-events: none;
+                }
 
-            /* Each state colours the ring, and the offline players are greyed out. */
-            .online {
-                --ring: var(--steam-online);
-            }
+                .steam-logo {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    fill: var(--primary-text-color);
+                }
 
-            .busy {
-                --ring: var(--steam-busy);
-            }
+                /* Each state colours the ring, and the offline players are greyed out. */
+                .online {
+                    --ring: var(--steam-online);
+                }
 
-            .away {
-                --ring: var(--steam-away);
-            }
+                .busy {
+                    --ring: var(--steam-busy);
+                }
 
-            .snooze {
-                --ring: var(--steam-snooze);
-            }
+                .away {
+                    --ring: var(--steam-away);
+                }
 
-            .looking_to_play,
-            .looking_to_trade {
-                --ring: var(--steam-looking);
-            }
+                .snooze {
+                    --ring: var(--steam-snooze);
+                }
 
-            .offline,
-            .unavailable {
-                --ring: var(--steam-offline);
-            }
+                .looking_to_play,
+                .looking_to_trade {
+                    --ring: var(--steam-looking);
+                }
 
-            /* Last, so a player in a game is green whatever else Steam says they are, as in their group */
-            .ingame {
-                --ring: var(--steam-ingame);
-            }
+                .offline,
+                .unavailable {
+                    --ring: var(--steam-offline);
+                }
 
-            .offline .avatar,
-            .unavailable .avatar {
-                filter: grayscale(1);
-                opacity: 0.65;
-            }
+                /* Last, so a player in a game is green whatever else Steam says they are, as in their group */
+                .ingame {
+                    --ring: var(--steam-ingame);
+                }
 
-            .offline .name,
-            .unavailable .name {
-                font-weight: 500;
-                color: var(--secondary-text-color);
-            }
+                .offline .avatar,
+                .unavailable .avatar {
+                    filter: grayscale(1);
+                    opacity: 0.65;
+                }
 
-            .not-found {
-                background-color: var(--warning-color, #ffa726);
-                color: var(--text-primary-color, #fff);
-                border-radius: 8px;
-                font-size: 14px;
-                padding: 8px;
-                overflow-wrap: anywhere;
-            }
-        `;
+                .offline .name,
+                .unavailable .name {
+                    font-weight: 500;
+                    color: var(--secondary-text-color);
+                }
+
+                .not-found {
+                    background-color: var(--warning-color, #ffa726);
+                    color: var(--text-primary-color, #fff);
+                    border-radius: 8px;
+                    font-size: 14px;
+                    padding: 8px;
+                    overflow-wrap: anywhere;
+                }
+            `,
+            fadeStyles,
+        ];
     }
 }
 

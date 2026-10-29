@@ -1,6 +1,7 @@
 {
     "common": {
         "invalid_configuration": "Invalid configuration",
+        "invalid_height": "Invalid height. height and max_height must be positive numbers of pixels, and height_mode auto, fixed or max.",
         "description": "A compact card to show Steam integrations",
         "name": "Steam card compact",
         "last_seen": "Last seen {amount} {unit} ago",
@@ -54,6 +55,15 @@
         "interactions": "Interactions",
         "tap_action": "Tap",
         "hold_action": "Hold",
-        "double_tap_action": "Double tap"
+        "double_tap_action": "Double tap",
+        "height_mode": "Height",
+        "height_mode_helper": "A height set in the layout tab of a sections view is used instead.",
+        "height_mode_auto": "Fits the content",
+        "height_mode_fixed": "Fixed",
+        "height_mode_max": "Grows up to a limit",
+        "height": "Fixed height",
+        "height_helper": "The card is always this tall.",
+        "max_height": "Maximum height",
+        "max_height_helper": "The card grows with its content up to this height."
     }
 }

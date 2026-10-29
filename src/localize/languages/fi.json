@@ -1,6 +1,7 @@
 {
     "common": {
         "invalid_configuration": "Virheellinen konfiguraatio",
+        "invalid_height": "Virheellinen korkeus. Korkeuksien (height ja max_height) on oltava positiivisia lukuja pikseleinä, ja korkeustilan (height_mode) auto, fixed tai max.",
         "description": "Kompakti kortti Steam-integraation tietojen näyttämiseksi",
         "name": "Steam card compact",
         "last_seen": "Nähty {amount} {unit} sitten",
@@ -54,6 +55,15 @@
         "interactions": "Toiminnot",
         "tap_action": "Napautus",
         "hold_action": "Pitkä painallus",
-        "double_tap_action": "Kaksoisnapautus"
+        "double_tap_action": "Kaksoisnapautus",
+        "height_mode": "Korkeus",
+        "height_mode_helper": "Osioihin jaetun näkymän asettelu-välilehdellä asetettu korkeus ohittaa tämän.",
+        "height_mode_auto": "Sisällön mukaan",
+        "height_mode_fixed": "Kiinteä",
+        "height_mode_max": "Kasvaa rajaan asti",
+        "height": "Kiinteä korkeus",
+        "height_helper": "Kortti on aina näin korkea.",
+        "max_height": "Enimmäiskorkeus",
+        "max_height_helper": "Kortti kasvaa sisältönsä mukana tähän korkeuteen asti."
     }
 }

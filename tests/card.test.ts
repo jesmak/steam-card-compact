@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { browserLanguage, translate } from "../src/localize/localize";
 import "../src/steam-card-compact";
 import type { SteamCardCompact } from "../src/steam-card-compact";
 import type { EntityRegistryEntry, HassEntity, HomeAssistant } from "../src/hass";
@@ -70,10 +71,11 @@ function merge(...parts: HomeAssistant[]): HomeAssistant {
     };
 }
 
-async function card(state: HomeAssistant, config: Partial<SteamCardCompactConfig>): Promise<SteamCardCompact> {
+async function card(state: HomeAssistant, config: Partial<SteamCardCompactConfig>, layout?: string): Promise<SteamCardCompact> {
     const element = document.createElement("steam-card-compact") as SteamCardCompact;
     element.setConfig({ type: "custom:steam-card-compact", ...config } as never);
     element.hass = state;
+    element.layout = layout;
     document.body.append(element);
     await element.updateComplete;
     return element;
@@ -342,6 +344,80 @@ describe("the layout", () => {
         expect(root.querySelector(".player.big .name")?.textContent).toBe("abc");
         expect(root.querySelectorAll(".player")).toHaveLength(1);
     });
+
+    it.each([
+        ["its content", undefined, {}, ""],
+        ["a fixed height", undefined, { height_mode: "fixed" as const, height: 240, max_height: 400 }, "height: 240px"],
+        ["a maximum height", undefined, { max_height: 400 }, "max-height: 400px"],
+        ["grid rows in a sections view", "grid", { height: 240, grid_options: { rows: 6 } }, "height: 100%"],
+        ["the mode when the grid rows are automatic", "grid", { height: 240, grid_options: { rows: "auto" } }, "height: 240px"],
+    ])("sizes itself by %s", async (_name, layout, extra, style) => {
+        const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
+        const root = shadow(await card(state, { entity: ["sensor.steam_abc", "sensor.steam_def"], ...extra }, layout));
+        expect(root.querySelector("ha-card")?.getAttribute("style") ?? "").toBe(style);
+    });
+
+    const TWO = { entity: ["sensor.steam_abc", "sensor.steam_def"] };
+
+    /** The card's list, taller than the room it has, as happy-dom lays nothing out. */
+    async function overflowing(element: SteamCardCompact): Promise<HTMLElement> {
+        const list = shadow(element).querySelector(".list") as HTMLElement;
+        Object.defineProperty(list, "scrollHeight", { value: 600, configurable: true });
+        Object.defineProperty(list, "clientHeight", { value: 200, configurable: true });
+        element.requestUpdate();
+        await element.updateComplete;
+        return list;
+    }
+
+    it.each([
+        ["held to a height", undefined, { height: 300 }, ["fade-bottom"]],
+        ["held up to a limit", undefined, { max_height: 300 }, ["fade-bottom"]],
+        ["held by rows in a sections view", "grid", { grid_options: { rows: 4 } }, ["fade-bottom"]],
+        [
+            "held to a height with automatic rows in a sections view",
+            "grid",
+            { height: 300, grid_options: { rows: "auto" } },
+            ["fade-bottom"],
+        ],
+        ["held by the older layout options' rows in a sections view", "grid", { layout_options: { grid_rows: 4 } }, ["fade-bottom"]],
+        ["never in auto", undefined, {}, []],
+        ["never in auto with automatic rows in a sections view", "grid", { grid_options: { rows: "auto" } }, []],
+        ["never by grid rows outside a sections view", undefined, { grid_options: { rows: 4 } }, []],
+    ])("fades the bottom edge of the list that runs past it when %s", async (_name, layout, extra, expected) => {
+        const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
+        const list = await overflowing(await card(state, { ...TWO, ...extra }, layout));
+        expect(["fade-top", "fade-bottom"].filter((name) => list.classList.contains(name))).toEqual(expected);
+    });
+
+    it("lets go of the list's fade when the card goes from held to auto, and fades it again when held again", async () => {
+        const element = await card(hass(player("sensor.steam_abc"), player("sensor.steam_def")), { ...TWO, height: 300 });
+        const list = await overflowing(element);
+        expect([...list.classList].filter((name) => name.startsWith("fade"))).toEqual(["fades", "fade-bottom"]);
+        element.setConfig({ type: "custom:steam-card-compact", ...TWO } as never);
+        await element.updateComplete;
+        expect([...list.classList].filter((name) => name.startsWith("fade"))).toEqual([]);
+        element.setConfig({ type: "custom:steam-card-compact", ...TWO, height: 300 } as never);
+        await element.updateComplete;
+        expect([...list.classList].filter((name) => name.startsWith("fade"))).toEqual(["fades", "fade-bottom"]);
+    });
+
+    it.each([
+        ["the list, never lower than its title and one row of players", { entity: ["sensor.steam_abc", "sensor.steam_def"] }, 3, 156],
+        ["the big card, never lower than its player", { entity: "sensor.steam_abc" }, 2, 92],
+    ])("holds %s", async (_name, config, rows, minimum) => {
+        const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
+        const element = await card(state, { ...config, height_mode: "fixed", height: 50 });
+        expect(element.getGridOptions().min_rows).toBe(rows);
+        expect(shadow(element).querySelector("ha-card")?.getAttribute("style")).toBe(`height: ${minimum}px`);
+    });
+
+    it("puts the title before the list, which holds the status headings and the rows of players", async () => {
+        const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
+        const root = shadow(await card(state, { entity: ["sensor.steam_abc", "sensor.steam_def"], height_mode: "fixed", height: 200 }));
+        const haCard = root.querySelector("ha-card")!;
+        expect([...haCard.children].map((child) => child.classList[0])).toEqual(["card-header", "list"]);
+        expect([...haCard.querySelector(".list")!.children].map((child) => child.className)).toEqual(["status-category", "user-row"]);
+    });
 });
 
 describe("the game behind the big card", () => {
@@ -411,6 +487,20 @@ describe("the configuration", () => {
     it("is happy with auto_populate alone", () => {
         const element = document.createElement("steam-card-compact") as SteamCardCompact;
         expect(() => element.setConfig({ type: "custom:steam-card-compact", auto_populate: true } as never)).not.toThrow();
+    });
+
+    it("refuses a height that isn't a positive number of pixels, and an unknown height mode, with an error about the height", () => {
+        const element = document.createElement("steam-card-compact") as SteamCardCompact;
+        const config = (extra: Record<string, unknown>) => ({ type: "custom:steam-card-compact", auto_populate: true, ...extra }) as never;
+        const error = translate(browserLanguage(), "common.invalid_height");
+        expect(error).toMatch(/^Invalid height\./);
+        for (const value of ["300px", 0, -10]) {
+            expect(() => element.setConfig(config({ max_height: value }))).toThrow(error);
+            expect(() => element.setConfig(config({ height: value }))).toThrow(error);
+        }
+        expect(() => element.setConfig(config({ height_mode: "tall" }))).toThrow(error);
+        // Left empty in YAML, each is unset.
+        expect(() => element.setConfig(config({ height_mode: null, height: null, max_height: null }))).not.toThrow();
     });
 
     it("offers the players of the picker's Home Assistant, by the registry", () => {
