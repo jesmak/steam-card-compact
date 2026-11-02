@@ -80,7 +80,7 @@ stands in.
 ## Sizes
 
 In a sections view the card is the section's full width by default, as tall as its contents rounded up to rows (see
-`row_step`), and can be made as narrow as half the section. Below 400 px the list puts one player to a row, so names
+`row_step`), and can be made as narrow as half the section. Below 435 px the list puts one player to a row, so names
 and games get the width. Below 360 px one player's own card leaves the game's logo out. Names and games wrap instead
 of being cut short.
 
