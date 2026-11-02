@@ -2,6 +2,7 @@
     "common": {
         "invalid_configuration": "Invalid configuration",
         "invalid_height": "Invalid height. height and max_height must be positive numbers of pixels, and height_mode auto, fixed or max.",
+        "invalid_row_step": "Invalid rounding. row_step must be full or half.",
         "description": "A compact card to show Steam integrations",
         "name": "Steam card compact",
         "last_seen": "Last seen {amount} {unit} ago",
@@ -64,6 +65,10 @@
         "height": "Fixed height",
         "height_helper": "The card is always this tall.",
         "max_height": "Maximum height",
-        "max_height_helper": "The card grows with its content up to this height."
+        "max_height_helper": "The card grows with its content up to this height.",
+        "row_step": "Rounding in a sections view",
+        "row_step_helper": "With automatic row height, the card's height is rounded up to whole rows, or to half rows to save space.",
+        "row_step_full": "Whole rows",
+        "row_step_half": "Half rows"
     }
 }

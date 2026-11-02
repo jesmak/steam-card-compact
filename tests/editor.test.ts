@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe("the visual editor", () => {
-    it("asks for the players, the layout, a title, the game picture, the height, the names and the actions", async () => {
+    it("asks for the players, the layout, a title, the game picture, the height, its rounding, the names and the actions", async () => {
         const names = form(await editor()).schema.map((entry) => entry.name);
         expect(names).toEqual([
             "entity",
@@ -61,6 +61,7 @@ describe("the visual editor", () => {
             "title",
             "game_background",
             "height_mode",
+            "row_step",
             "name_overrides",
             "interactions",
         ]);

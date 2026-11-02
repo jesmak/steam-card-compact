@@ -8,6 +8,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./hass";
 import { heightData, heightSchema, tidyHeight } from "./height";
+import { rowStepData, rowStepSchema, tidyRowStep } from "./rows";
 import { steamPlayers } from "./friends";
 import { languageOf, translate } from "./localize/localize";
 import type { SteamCardCompactConfig } from "./types";
@@ -50,6 +51,7 @@ function schema(hass: HomeAssistant, config: SteamCardCompactConfig, text: (key:
         { name: "title", selector: { text: {} } },
         { name: "game_background", selector: { boolean: {} } },
         ...heightSchema(config, text),
+        ...rowStepSchema(config, text),
         {
             name: "name_overrides",
             selector: {
@@ -99,7 +101,7 @@ export class SteamCardCompactEditor extends LitElement {
         return html`
             <ha-form
                 .hass=${this.hass}
-                .data=${heightData({ ...DEFAULTS, ...this.config, entity })}
+                .data=${rowStepData(heightData({ ...DEFAULTS, ...this.config, entity }))}
                 .schema=${schema(this.hass, this.config, (key) => this.text(key))}
                 .computeLabel=${(entry: SchemaEntry) => this.text(`editor.${entry.name}`)}
                 .computeHelper=${(entry: SchemaEntry) => this.helper(entry.name)}
@@ -109,7 +111,7 @@ export class SteamCardCompactEditor extends LitElement {
     }
 
     private valueChanged(event: CustomEvent<{ value: SteamCardCompactConfig }>): void {
-        const config: SteamCardCompactConfig = tidyHeight(event.detail.value);
+        const config: SteamCardCompactConfig = tidyRowStep(tidyHeight(event.detail.value));
 
         // One player is kept as a string, as it always was, for the big card. A configuration that was a list stays
         // one, so a list of one player isn't turned into the big card by an edit of something else.

@@ -31,6 +31,7 @@ import type { HassEntity, HomeAssistant } from "./hass";
 import { gridMinRows, heightCardSize, heightStyle, validHeight } from "./height";
 import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
+import { filledHeight, validRowStep } from "./rows";
 import type { SteamCardCompactConfig } from "./types";
 
 console.info(
@@ -57,6 +58,9 @@ registry.customCards.push({
     preview: true,
 });
 
+/** The gap under the list's title, to which the spare room of a whole row is added. */
+const HEADER_GAP_PX = 8;
+
 @customElement("steam-card-compact")
 export class SteamCardCompact extends LitElement {
     @property({ attribute: false }) public hass?: HomeAssistant;
@@ -64,8 +68,14 @@ export class SteamCardCompact extends LitElement {
     @state() private config?: SteamCardCompactConfig;
     // Pictures that didn't load, so the card falls back instead of showing a broken one
     @state() private failed = new Set<string>();
+    // On automatic rows in a sections view: the card's height on the rows, and what it leaves over under the title
+    @state() private filled = 0;
+    @state() private spare = 0;
     private readonly gestures = new Map<string, GestureDetector>();
     private timer?: ReturnType<typeof setInterval>;
+    private frame?: number;
+    private observed?: Element;
+    private readonly resizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => this.fillRowsSoon());
 
     constructor() {
         super();
@@ -90,6 +100,9 @@ export class SteamCardCompact extends LitElement {
         if (!validHeight(config)) {
             throw new Error(translate(browserLanguage(), "common.invalid_height"));
         }
+        if (!validRowStep(config)) {
+            throw new Error(translate(browserLanguage(), "common.invalid_row_step"));
+        }
         this.config = { ...config };
     }
 
@@ -103,18 +116,19 @@ export class SteamCardCompact extends LitElement {
         return { columns: 12, rows: "auto", min_columns: 6, min_rows: gridMinRows(this.minimumHeight()) };
     }
 
-    // The lowest the card goes when held to a height. The big card: its border and its player at their natural height,
-    // the 64 px avatar with its padding, as nothing in it scrolls. The list: its border and padding, the title, and the
-    // first status heading with one row of players under it.
+    // The lowest the card goes when held to a height, with every text on one line as a held card has them. The big card:
+    // its border and its player, the 64 px avatar with its padding, one and a half rows, as nothing in it scrolls. The
+    // list: its border and padding, the title, and the first status heading with one row of players under it.
     private minimumHeight(): number {
-        return this.single() ? 2 + 26 + 64 : 2 + 32 + 37 + 31 + 54;
+        return this.single() ? 2 + 22 + 64 : 2 + 32 + 37 + 31 + 54;
     }
 
     // The times ("1 h 20 min", "seen 5 min ago") age while the sensors stay the same, so the card is drawn
-    // again every minute
+    // again every minute. Measured again when it comes back to the page, as its width may have changed meanwhile.
     public connectedCallback(): void {
         super.connectedCallback();
         this.timer = setInterval(() => this.requestUpdate(), 60_000);
+        this.requestUpdate();
     }
 
     public disconnectedCallback(): void {
@@ -122,6 +136,68 @@ export class SteamCardCompact extends LitElement {
         clearInterval(this.timer);
         this.gestures.forEach((detector) => detector.dispose());
         this.gestures.clear();
+        this.resizes?.disconnect();
+        this.observed = undefined;
+        cancelAnimationFrame(this.frame ?? 0);
+    }
+
+    protected updated(): void {
+        const card = this.renderRoot.querySelector("ha-card") ?? undefined;
+        if (card !== this.observed) {
+            if (this.observed) this.resizes?.unobserve(this.observed);
+            if (card) this.resizes?.observe(card);
+            this.observed = card;
+        }
+        this.fillRowsSoon();
+    }
+
+    private fillRowsSoon(): void {
+        cancelAnimationFrame(this.frame ?? 0);
+        this.frame = requestAnimationFrame(() => this.fillRows());
+    }
+
+    /**
+     * On automatic rows in a sections view, the card takes the whole rows its content needs, or the half rows with
+     * `row_step: half`, so the cards under it stay on the rows. The content is measured by its own size, never by the
+     * parts that grow to fill the card: the list's last row, and the big card's avatar and texts, which sit in the middle
+     * of a player that grows. What a whole row leaves over goes under the list's title, measured out of the content
+     * again each time, and in the big card to the player, which grows to take it.
+     */
+    private fillRows(): void {
+        const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
+        if (!card || !card.clientWidth || this.layout !== "grid" || this.heightStyle()) {
+            if (this.filled) this.filled = 0;
+            if (this.spare) this.spare = 0;
+            return;
+        }
+        const style = getComputedStyle(card);
+        const borders = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+        let content: number;
+        const player = card.querySelector<HTMLElement>(":scope > .player.big");
+        const header = card.querySelector<HTMLElement>(":scope > .card-header");
+        if (player) {
+            const own = getComputedStyle(player);
+            const inner = [...player.querySelectorAll<HTMLElement>(":scope > .avatar-wrap, :scope > .details")].map(
+                (part) => part.getBoundingClientRect().height,
+            );
+            content = borders + (parseFloat(own.paddingTop) || 0) + Math.max(0, ...inner) + (parseFloat(own.paddingBottom) || 0);
+        } else {
+            // An empty list grows to whatever the card is given, so it counts only to its top
+            const list = card.querySelector<HTMLElement>(":scope > .list");
+            const last = list?.lastElementChild ?? list ?? card.lastElementChild;
+            if (!last) return;
+            const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
+            content =
+                last.getBoundingClientRect()[last === list ? "top" : "bottom"] -
+                card.getBoundingClientRect().top +
+                (parseFloat(style.paddingBottom) || 0) +
+                (parseFloat(style.borderBottomWidth) || 0) -
+                shown;
+        }
+        const filled = filledHeight(Math.round(content), this.config ?? {});
+        const spare = header ? Math.max(0, Math.floor(filled - content)) : 0;
+        if (filled !== this.filled) this.filled = filled;
+        if (spare !== this.spare) this.spare = spare;
     }
 
     private heightStyle(): string {
@@ -186,14 +262,17 @@ export class SteamCardCompact extends LitElement {
             .map((entity) => readPlayer(hass, entity));
         const missing = wanted.filter((id) => hass.states[id] === undefined);
 
-        const style = this.heightStyle();
+        // Held to a height, every text keeps to one line, so the card's height doesn't follow how long a game's name is
+        const held = this.heightStyle();
+        const style = held || (this.filled ? `min-height: ${this.filled}px; --steam-spare: ${this.spare}px` : "");
         if (this.single()) {
-            return html`<ha-card class="big-card" style=${style}>
+            return html`<ha-card class="big-card ${held ? "held" : ""}" style=${style}>
                 ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
             </ha-card>`;
         }
-        return html`<ha-card style=${style}>
-            <div class="card-header">${this.config?.title || this.text("common.title")}</div>
+        const title = this.config?.title || this.text("common.title");
+        return html`<ha-card class=${held ? "held" : ""} style=${style}>
+            <div class="card-header" title=${title}>${title}</div>
             <div class="list">${this.listRows(players, missing)}</div>
         </ha-card>`;
     }
@@ -227,9 +306,8 @@ export class SteamCardCompact extends LitElement {
                 }
                 ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
-                    ${playing ? this.gameLine(player) : nothing}
-                    ${player.entity.state === "offline" ? html`<div class="seen">${this.lastSeen(player)}</div>` : nothing}
+                    ${this.nameLine(player)} ${playing ? this.gameLine(player) : nothing}
+                    ${player.entity.state === "offline" ? html`<div class="seen" title=${this.lastSeen(player)}>${this.lastSeen(player)}</div>` : nothing}
                 </div>
             `,
         );
@@ -246,8 +324,8 @@ export class SteamCardCompact extends LitElement {
             html`
                 ${this.gameBackground ? (playing ? this.gameArt(player) : STEAM_LOGO) : nothing} ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
-                    <div class="seen">${state}</div>
+                    ${this.nameLine(player)}
+                    <div class="seen" title=${state}>${state}</div>
                     ${playing ? this.gameLine(player) : nothing}
                 </div>
             `,
@@ -323,10 +401,18 @@ export class SteamCardCompact extends LitElement {
                   >${player.game}</a
               >`
             : html`<span class="game-name">${player.game}</span>`;
-        return html`<div class="game">
+        const played = time ? `· ${this.duration(time)}` : "";
+        // The whole line as the tooltip, as a held card's ellipsis takes the play time first
+        return html`<div class="game" title=${played ? `${player.game ?? ""} ${played}` : (player.game ?? "")}>
             ${player.gameIcon ? html`<img src=${player.gameIcon} class="game-icon" alt="" />` : nothing}${name}
-            ${time ? html`<span class="play-time">· ${this.duration(time)}</span>` : nothing}
+            ${played ? html`<span class="play-time">${played}</span>` : nothing}
         </div>`;
+    }
+
+    /** The player's name, with the whole of it as a tooltip, as a held card cuts it short. */
+    private nameLine(player: Player): TemplateResult {
+        const name = displayName(player.entity, this.config?.name_overrides);
+        return html`<div class="name" title=${name}>${name}</div>`;
     }
 
     /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */
@@ -425,9 +511,10 @@ export class SteamCardCompact extends LitElement {
                     padding: 0;
                 }
 
+                /* What a whole row leaves over goes under the title */
                 .card-header {
                     flex: none;
-                    padding: 0 0 8px 0;
+                    padding: 0 0 calc(8px + var(--steam-spare, 0px)) 0;
                     font-size: var(--ha-card-header-font-size, 24px);
                     line-height: 1.2;
                     overflow-wrap: anywhere;
@@ -486,13 +573,14 @@ export class SteamCardCompact extends LitElement {
                     }
                 }
 
-                /* With a height of its own, the big card's player and picture fill all of it. */
+                /* With a height of its own, the big card's player and picture fill all of it. Its border, padding and avatar
+                   come to one and a half rows of a sections view, which texts that wrap make taller. */
                 .player.big {
                     flex: 1 1 auto;
                     width: 100%;
-                    min-height: 88px;
+                    min-height: 86px;
                     gap: 12px;
-                    padding: 12px 16px 14px 16px;
+                    padding: 10px 16px 12px 16px;
                     border-radius: var(--ha-card-border-radius, 12px);
                 }
 
@@ -561,7 +649,7 @@ export class SteamCardCompact extends LitElement {
                     flex: 1 1 auto;
                 }
 
-                /* Names and games wrap rather than end in an ellipsis */
+                /* Names and games wrap rather than end in an ellipsis, unless the card is held to a height */
                 .name {
                     font-weight: 600;
                     overflow-wrap: anywhere;
@@ -585,6 +673,16 @@ export class SteamCardCompact extends LitElement {
                 .big .game {
                     font-size: 14px;
                     margin-top: 2px;
+                }
+
+                /* Held to a height, each text keeps to one line and ends in an ellipsis, its whole text in its tooltip */
+                ha-card.held .card-header,
+                ha-card.held .name,
+                ha-card.held .seen,
+                ha-card.held .game {
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
                 }
 
                 .game-icon {

@@ -403,7 +403,7 @@ describe("the layout", () => {
 
     it.each([
         ["the list, never lower than its title and one row of players", { entity: ["sensor.steam_abc", "sensor.steam_def"] }, 3, 156],
-        ["the big card, never lower than its player", { entity: "sensor.steam_abc" }, 2, 92],
+        ["the big card, never lower than its player", { entity: "sensor.steam_abc" }, 2, 88],
     ])("holds %s", async (_name, config, rows, minimum) => {
         const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
         const element = await card(state, { ...config, height_mode: "fixed", height: 50 });
@@ -513,5 +513,224 @@ describe("the configuration", () => {
         delete state.entities["sensor.steam_def"];
         const stub = (customElements.get("steam-card-compact") as unknown as typeof SteamCardCompact).getStubConfig(state);
         expect(stub).toEqual({ entity: ["sensor.def", "sensor.steam_abc"] });
+    });
+});
+
+describe("filling the rows of a sections view", () => {
+    type Layout = { end?: number; spare?: number; empty?: boolean; details?: number; padding?: number };
+
+    /**
+     * Lays the card out as a browser would, as happy-dom lays nothing out: 500 px wide with its top at 0, `padding` under
+     * its content and a 1 px border. The list's last row ends at `end`, or an empty list starts there, with `spare` drawn
+     * under the title. The big card's player has 10 and 12 px of padding around its 64 px avatar and its texts,
+     * `details` tall.
+     */
+    function laidOut(element: SteamCardCompact, { end = 0, spare = 0, empty = false, details = 50, padding = 16 }: Layout): void {
+        const root = shadow(element);
+        const haCard = root.querySelector<HTMLElement>("ha-card")!;
+        Object.defineProperty(haCard, "clientWidth", { value: 500, configurable: true });
+        haCard.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+        const list = root.querySelector<HTMLElement>(".list");
+        if (list && empty) {
+            list.getBoundingClientRect = () => ({ top: end, bottom: 900 }) as DOMRect;
+        } else if (list) {
+            list.lastElementChild!.getBoundingClientRect = () => ({ bottom: end }) as DOMRect;
+        } else if (!root.querySelector(".player.big")) {
+            haCard.lastElementChild!.getBoundingClientRect = () => ({ bottom: end }) as DOMRect;
+        }
+        const avatar = root.querySelector<HTMLElement>(".big > .avatar-wrap");
+        if (avatar) avatar.getBoundingClientRect = () => ({ height: 64 }) as DOMRect;
+        const texts = root.querySelector<HTMLElement>(".big > .details");
+        if (texts) texts.getBoundingClientRect = () => ({ height: details }) as DOMRect;
+        const styles = new Map<Element | null, Record<string, string>>([
+            [haCard, { paddingBottom: `${padding}px`, borderTopWidth: "1px", borderBottomWidth: "1px" }],
+            [root.querySelector(".card-header"), { paddingBottom: `${8 + spare}px` }],
+            [root.querySelector(".player.big"), { paddingTop: "10px", paddingBottom: "12px" }],
+        ]);
+        vi.spyOn(window, "getComputedStyle").mockImplementation((target) => (styles.get(target) ?? {}) as unknown as CSSStyleDeclaration);
+    }
+
+    const filled = (height: number, spare: number) => `min-height: ${height}px; --steam-spare: ${spare}px`;
+    const two = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
+    const list = { entity: ["sensor.steam_abc", "sensor.steam_def"] };
+    const one = { entity: "sensor.steam_abc" };
+
+    // The list's content is its last row's end, the padding and border under it, less the room drawn under the title. The
+    // big card's is its border, its player's padding and the taller of the avatar and the texts. Either ends on the next
+    // whole row (64k − 8 px), or half row with `row_step: half`. What that leaves goes under the list's title, and in the
+    // big card to its player, which grows to take it.
+    it.each<[string, Partial<SteamCardCompactConfig>, string | undefined, Layout, string]>([
+        ["a list already on a whole row", list, "grid", { end: 103 }, filled(120, 0)],
+        ["a list over a whole row", list, "grid", { end: 107 }, filled(184, 60)],
+        ["a list over a whole row, on half rows", { ...list, row_step: "half" }, "grid", { end: 107 }, filled(152, 28)],
+        ["a list with the room under its title already drawn", list, "grid", { end: 167, spare: 60 }, filled(184, 60)],
+        ["an empty list, measured to its top", { entity: [] }, "grid", { end: 50, empty: true }, filled(120, 53)],
+        ["the big card", one, "grid", {}, filled(120, 0)],
+        ["the big card on half rows, one and a half rows", { ...one, row_step: "half" }, "grid", {}, filled(88, 0)],
+        ["the big card with taller texts, on half rows", { ...one, row_step: "half" }, "grid", { details: 70 }, filled(120, 0)],
+        ["the big card whose border puts it over a half row", { ...one, row_step: "half" }, "grid", { details: 66 }, filled(120, 0)],
+        ["a missing player's big card", { entity: "sensor.steam_gone" }, "grid", { end: 40, padding: 0 }, filled(56, 0)],
+        ["a list held to a height", { ...list, height_mode: "fixed", height: 300 }, "grid", { end: 107 }, "height: 300px"],
+        ["a list outside a sections view", list, undefined, { end: 107 }, ""],
+    ])("%s", async (_name, config, layout, laid, style) => {
+        const element = await card(two, config, layout);
+        laidOut(element, laid);
+        (element as unknown as { fillRows(): void }).fillRows();
+        await element.updateComplete;
+        expect(shadow(element).querySelector("ha-card")?.getAttribute("style") ?? "").toBe(style);
+        vi.restoreAllMocks();
+    });
+
+    it("lets go of the filled rows while held, so none are left over when it is let go", async () => {
+        const element = await card(two, list, "grid");
+        const fill = async () => {
+            (element as unknown as { fillRows(): void }).fillRows();
+            await element.updateComplete;
+        };
+        const style = () => shadow(element).querySelector("ha-card")?.getAttribute("style") ?? "";
+        laidOut(element, { end: 107 });
+        await fill();
+        expect(style()).toBe(filled(184, 60));
+        element.setConfig({ type: "custom:steam-card-compact", ...list, height_mode: "fixed", height: 300 } as never);
+        await element.updateComplete;
+        await fill();
+        expect(style()).toBe("height: 300px");
+        element.setConfig({ type: "custom:steam-card-compact", ...list } as never);
+        await element.updateComplete;
+        expect(style()).toBe("");
+        vi.restoreAllMocks();
+    });
+});
+
+describe("held to a height", () => {
+    const game = "Warhammer 40,000: Space Marine 2 – Ultra Edition";
+
+    it.each<[string, Partial<SteamCardCompactConfig>]>([
+        ["the big card", { entity: "sensor.steam_abc" }],
+        ["the list", { entity: ["sensor.steam_abc"], layout: "list" }],
+    ])("marks %s as held only while it is held", async (_name, config) => {
+        const state = device("abc", game, { since: "2026-09-16T10:00:00Z" });
+        const root = shadow(await card(state, { ...config, height_mode: "fixed", height: 200 }));
+        expect(root.querySelector("ha-card")?.classList.contains("held")).toBe(true);
+        const auto = shadow(await card(state, config));
+        expect(auto.querySelector("ha-card")?.classList.contains("held")).toBe(false);
+    });
+
+    // Every text that a held card cuts short carries its whole as a tooltip, held or not
+    const offline = () =>
+        hass(player("sensor.steam_abc", { state: "offline", last_online: new Date(Date.now() - 5 * 60_000).toISOString() }));
+    const title = "Steam friends playing tonight, all of them";
+    const renamed = [{ entity: "sensor.steam_abc", name: "Matti Meikäläinen" }];
+    // The whole line, as the ellipsis takes the play time first; nothing when the card shows no play time
+    const withTime = (root: ShadowRoot) => {
+        const time = root.querySelector(".play-time")?.textContent?.trim() ?? "";
+        return /^· \d/.test(time) ? `${game} ${time}` : "";
+    };
+    const cases: [string, () => HomeAssistant, Partial<SteamCardCompactConfig>, string, (root: ShadowRoot) => string][] = [
+        ["the list's title", () => hass(player("sensor.steam_abc")), { entity: ["sensor.steam_abc"], title }, ".card-header", () => title],
+        [
+            "the list's own title, translated",
+            () => hass(player("sensor.steam_abc")),
+            { entity: ["sensor.steam_abc"] },
+            ".card-header",
+            () => translate("en", "common.title"),
+        ],
+        [
+            "a name given in its place, on the big card",
+            () => hass(player("sensor.steam_abc")),
+            { entity: "sensor.steam_abc", name_overrides: renamed },
+            ".name",
+            () => "Matti Meikäläinen",
+        ],
+        [
+            "a name given in its place, in the list",
+            () => hass(player("sensor.steam_abc")),
+            { entity: ["sensor.steam_abc"], name_overrides: renamed },
+            ".name",
+            () => "Matti Meikäläinen",
+        ],
+        [
+            "the player's own name, on the big card",
+            () => hass(player("sensor.steam_abc")),
+            { entity: "sensor.steam_abc" },
+            ".name",
+            () => "abc",
+        ],
+        [
+            "the player's own name, in the list",
+            () => hass(player("sensor.steam_abc")),
+            { entity: ["sensor.steam_abc"] },
+            ".name",
+            () => "abc",
+        ],
+        [
+            "a game with its play time, on the big card",
+            () => device("abc", game, { since: "2026-09-16T10:00:00Z" }),
+            { entity: "sensor.steam_abc" },
+            ".game",
+            (root) => withTime(root),
+        ],
+        [
+            "a game with its play time, in the list",
+            () => device("abc", game, { since: "2026-09-16T10:00:00Z" }),
+            { entity: ["sensor.steam_abc"] },
+            ".game",
+            (root) => withTime(root),
+        ],
+        ["a game with no play time, on the big card", () => device("abc", game), { entity: "sensor.steam_abc" }, ".game", () => game],
+        ["a game with no play time, in the list", () => device("abc", game), { entity: ["sensor.steam_abc"] }, ".game", () => game],
+        [
+            "the time the big card's player was last seen",
+            offline,
+            { entity: "sensor.steam_abc" },
+            ".seen",
+            (root) => root.querySelector(".seen")!.textContent!.trim(),
+        ],
+        [
+            "the time a listed player was last seen",
+            offline,
+            { entity: ["sensor.steam_abc"] },
+            ".seen",
+            (root) => root.querySelector(".seen")!.textContent!.trim(),
+        ],
+    ];
+    describe.each<[string, Partial<SteamCardCompactConfig>]>([
+        ["held", { height_mode: "fixed", height: 200 }],
+        ["not held", {}],
+    ])("%s", (_held, height) => {
+        it.each(cases)("gives %s its whole text as a tooltip", async (_name, state, config, selector, expected) => {
+            const root = shadow(await card(state(), { ...config, ...height }));
+            const text = expected(root);
+            expect(text).not.toBe("");
+            expect(root.querySelector(selector)?.getAttribute("title")).toBe(text);
+        });
+    });
+
+    // happy-dom lays nothing out, so the rule itself is read from the card's styles: each text on one line, cut short
+    it.each([".card-header", ".name", ".seen", ".game"])("keeps %s to one line with an ellipsis when held", (part) => {
+        const styles = [(customElements.get("steam-card-compact") as unknown as { styles: unknown }).styles].flat(Infinity);
+        const css = styles
+            .map((style) => (style as { cssText: string }).cssText)
+            .join("\n")
+            .replace(/\/\*[\s\S]*?\*\//g, "");
+        const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
+            selectors: selectors.split(",").map((selector) => selector.trim()),
+            body,
+        }));
+        const held = rules.filter((rule) => rule.selectors.includes(`ha-card.held ${part}`));
+        // Without hidden overflow the ellipsis never shows, and a long text runs over whatever is beside it
+        const oneLine = (body: string) =>
+            /white-space:\s*nowrap/.test(body) && /overflow:\s*hidden/.test(body) && /text-overflow:\s*ellipsis/.test(body);
+        expect(held.some((rule) => oneLine(rule.body))).toBe(true);
+    });
+});
+
+describe("the rounding", () => {
+    it("refuses a step that is neither whole nor half rows", () => {
+        const element = document.createElement("steam-card-compact") as SteamCardCompact;
+        expect(() =>
+            element.setConfig({ type: "custom:steam-card-compact", entity: "sensor.steam_abc", row_step: "quarter" } as never),
+        ).toThrow(translate(browserLanguage(), "common.invalid_row_step"));
+        expect(() => element.setConfig({ type: "custom:steam-card-compact", entity: "sensor.steam_abc", row_step: "half" })).not.toThrow();
     });
 });

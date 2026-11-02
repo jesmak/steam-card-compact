@@ -53,6 +53,7 @@ also be written by hand.
 | `height_mode`       | string         | How tall the card is. `auto` fits its content, `fixed` keeps it at `height`, `max` lets it grow up to `max_height`. In `fixed` and `max` the list scrolls below the title, which stays in view, and the card never gets lower than its title and one row of players. The big card for one player has nothing to scroll and never gets lower than the player. A height in grid rows, set in the layout tab of a sections view, is used instead | `fixed` when `height` is set, `max` when only `max_height` is, otherwise `auto` |
 | `height`            | number         | The card's height in pixels, for `fixed`                                                                                                                                                                                                                                                                                                                                                                                                      |                                                                                 |
 | `max_height`        | number         | The card's greatest height in pixels, for `max`                                                                                                                                                                                                                                                                                                                                                                                               |                                                                                 |
+| `row_step`          | string         | How the card rounds its height on automatic rows in a sections view, with `height_mode` `auto`. `full` rounds up to whole rows, with the room left over under the list's title, or in one player's own card around the player, and `half` to half rows, which saves space but may leave the cards under it half a row off the rows of the sections beside it                                                                                  | `full`                                                                          |
 | `name_overrides`    | list           | Names to show instead of the players' own, each an `entity` and the `name` to show for it                                                                                                                                                                                                                                                                                                                                                     | none                                                                            |
 | `tap_action`        | object         | What tapping a player does, as for Home Assistant's own cards                                                                                                                                                                                                                                                                                                                                                                                 | `action: more-info`                                                             |
 | `hold_action`       | object         | What holding a player does                                                                                                                                                                                                                                                                                                                                                                                                                    | none                                                                            |
@@ -78,9 +79,14 @@ stands in.
 
 ## Sizes
 
-In a sections view the card is the section's full width by default, as tall as its contents, and can be made as
-narrow as half the section. Below 400 px the list puts one player to a row, so names and games get the width. Below
-360 px one player's own card leaves the game's logo out. Names and games wrap instead of being cut short.
+In a sections view the card is the section's full width by default, as tall as its contents rounded up to rows (see
+`row_step`), and can be made as narrow as half the section. Below 400 px the list puts one player to a row, so names
+and games get the width. Below 360 px one player's own card leaves the game's logo out. Names and games wrap instead
+of being cut short.
+
+Held to a height, the list's title and every name, game and last seen time keep to one line, cut short with an
+ellipsis when they are longer, with the whole of each in a tooltip. So a long title or game's name never makes the card
+taller than its height.
 
 ## Examples
 

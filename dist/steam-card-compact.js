@@ -746,6 +746,41 @@ function tidyHeight(config) {
   return tidied;
 }
 
+// src/rows.ts
+var ROW_STEPS = ["full", "half"];
+var ROW_PX = 64;
+var ROW_GAP_PX = 8;
+function validRowStep(config) {
+  return config.row_step === void 0 || config.row_step === null || ROW_STEPS.includes(config.row_step);
+}
+function filledHeight(content, config) {
+  const step = config.row_step === "half" ? ROW_PX / 2 : ROW_PX;
+  return Math.max(1, Math.ceil((content + ROW_GAP_PX) / step)) * step - ROW_GAP_PX;
+}
+function rowStepSchema(config, text) {
+  if (heightMode(config) !== "auto") {
+    return [];
+  }
+  return [
+    {
+      name: "row_step",
+      selector: {
+        select: { mode: "dropdown", options: ROW_STEPS.map((value) => ({ value, label: text(`editor.row_step_${value}`) })) }
+      }
+    }
+  ];
+}
+function rowStepData(config) {
+  return { ...config, row_step: config.row_step ?? "full" };
+}
+function tidyRowStep(config) {
+  const tidied = { ...config };
+  if (tidied.row_step !== "half" || heightMode(tidied) !== "auto") {
+    delete tidied.row_step;
+  }
+  return tidied;
+}
+
 // src/friends.ts
 var PLATFORM = "steam_online";
 function isSteamPlayer(entity, entities) {
@@ -910,6 +945,7 @@ var en_default = {
   common: {
     invalid_configuration: "Invalid configuration",
     invalid_height: "Invalid height. height and max_height must be positive numbers of pixels, and height_mode auto, fixed or max.",
+    invalid_row_step: "Invalid rounding. row_step must be full or half.",
     description: "A compact card to show Steam integrations",
     name: "Steam card compact",
     last_seen: "Last seen {amount} {unit} ago",
@@ -972,7 +1008,11 @@ var en_default = {
     height: "Fixed height",
     height_helper: "The card is always this tall.",
     max_height: "Maximum height",
-    max_height_helper: "The card grows with its content up to this height."
+    max_height_helper: "The card grows with its content up to this height.",
+    row_step: "Rounding in a sections view",
+    row_step_helper: "With automatic row height, the card's height is rounded up to whole rows, or to half rows to save space.",
+    row_step_full: "Whole rows",
+    row_step_half: "Half rows"
   }
 };
 
@@ -981,6 +1021,7 @@ var fi_default = {
   common: {
     invalid_configuration: "Virheellinen konfiguraatio",
     invalid_height: "Virheellinen korkeus. Korkeuksien (height ja max_height) on oltava positiivisia lukuja pikselein\xE4, ja korkeustilan (height_mode) auto, fixed tai max.",
+    invalid_row_step: "Virheellinen py\xF6ristys. Py\xF6ristyksen (row_step) on oltava full tai half.",
     description: "Kompakti kortti Steam-integraation tietojen n\xE4ytt\xE4miseksi",
     name: "Steam card compact",
     last_seen: "N\xE4hty {amount} {unit} sitten",
@@ -1043,7 +1084,11 @@ var fi_default = {
     height: "Kiinte\xE4 korkeus",
     height_helper: "Kortti on aina n\xE4in korkea.",
     max_height: "Enimm\xE4iskorkeus",
-    max_height_helper: "Kortti kasvaa sis\xE4lt\xF6ns\xE4 mukana t\xE4h\xE4n korkeuteen asti."
+    max_height_helper: "Kortti kasvaa sis\xE4lt\xF6ns\xE4 mukana t\xE4h\xE4n korkeuteen asti.",
+    row_step: "Py\xF6ristys osioihin jaetussa n\xE4kym\xE4ss\xE4",
+    row_step_helper: "Automaattisella rivikorkeudella kortin korkeus py\xF6ristet\xE4\xE4n yl\xF6sp\xE4in kokonaisiin riveihin, tai tilan s\xE4\xE4st\xE4miseksi puolikkaisiin riveihin.",
+    row_step_full: "Kokonaisiin riveihin",
+    row_step_half: "Puolikkaisiin riveihin"
   }
 };
 
@@ -1105,6 +1150,7 @@ function schema(hass, config, text) {
     { name: "title", selector: { text: {} } },
     { name: "game_background", selector: { boolean: {} } },
     ...heightSchema(config, text),
+    ...rowStepSchema(config, text),
     {
       name: "name_overrides",
       selector: {
@@ -1151,7 +1197,7 @@ var SteamCardCompactEditor = class extends i4 {
     return b2`
             <ha-form
                 .hass=${this.hass}
-                .data=${heightData({ ...DEFAULTS, ...this.config, entity })}
+                .data=${rowStepData(heightData({ ...DEFAULTS, ...this.config, entity }))}
                 .schema=${schema(this.hass, this.config, (key) => this.text(key))}
                 .computeLabel=${(entry) => this.text(`editor.${entry.name}`)}
                 .computeHelper=${(entry) => this.helper(entry.name)}
@@ -1160,7 +1206,7 @@ var SteamCardCompactEditor = class extends i4 {
         `;
   }
   valueChanged(event) {
-    const config = tidyHeight(event.detail.value);
+    const config = tidyRowStep(tidyHeight(event.detail.value));
     if (Array.isArray(config.entity)) {
       if (config.entity.length === 0) {
         delete config.entity;
@@ -1375,11 +1421,15 @@ registry.customCards.push({
   documentationURL: "https://github.com/jesmak/steam-card-compact",
   preview: true
 });
+var HEADER_GAP_PX = 8;
 var SteamCardCompact = class extends i4 {
   constructor() {
     super();
     this.failed = /* @__PURE__ */ new Set();
+    this.filled = 0;
+    this.spare = 0;
     this.gestures = /* @__PURE__ */ new Map();
+    this.resizes = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(() => this.fillRowsSoon());
     new ScrollFade(this, () => this.heightStyle() ? this.renderRoot.querySelectorAll(".list") : []);
   }
   static getConfigElement() {
@@ -1397,6 +1447,9 @@ var SteamCardCompact = class extends i4 {
     if (!validHeight(config)) {
       throw new Error(translate(browserLanguage(), "common.invalid_height"));
     }
+    if (!validRowStep(config)) {
+      throw new Error(translate(browserLanguage(), "common.invalid_row_step"));
+    }
     this.config = { ...config };
   }
   getCardSize() {
@@ -1406,23 +1459,77 @@ var SteamCardCompact = class extends i4 {
   getGridOptions() {
     return { columns: 12, rows: "auto", min_columns: 6, min_rows: gridMinRows(this.minimumHeight()) };
   }
-  // The lowest the card goes when held to a height. The big card: its border and its player at their natural height,
-  // the 64 px avatar with its padding, as nothing in it scrolls. The list: its border and padding, the title, and the
-  // first status heading with one row of players under it.
+  // The lowest the card goes when held to a height, with every text on one line as a held card has them. The big card:
+  // its border and its player, the 64 px avatar with its padding, one and a half rows, as nothing in it scrolls. The
+  // list: its border and padding, the title, and the first status heading with one row of players under it.
   minimumHeight() {
-    return this.single() ? 2 + 26 + 64 : 2 + 32 + 37 + 31 + 54;
+    return this.single() ? 2 + 22 + 64 : 2 + 32 + 37 + 31 + 54;
   }
   // The times ("1 h 20 min", "seen 5 min ago") age while the sensors stay the same, so the card is drawn
-  // again every minute
+  // again every minute. Measured again when it comes back to the page, as its width may have changed meanwhile.
   connectedCallback() {
     super.connectedCallback();
     this.timer = setInterval(() => this.requestUpdate(), 6e4);
+    this.requestUpdate();
   }
   disconnectedCallback() {
     super.disconnectedCallback();
     clearInterval(this.timer);
     this.gestures.forEach((detector) => detector.dispose());
     this.gestures.clear();
+    this.resizes?.disconnect();
+    this.observed = void 0;
+    cancelAnimationFrame(this.frame ?? 0);
+  }
+  updated() {
+    const card = this.renderRoot.querySelector("ha-card") ?? void 0;
+    if (card !== this.observed) {
+      if (this.observed) this.resizes?.unobserve(this.observed);
+      if (card) this.resizes?.observe(card);
+      this.observed = card;
+    }
+    this.fillRowsSoon();
+  }
+  fillRowsSoon() {
+    cancelAnimationFrame(this.frame ?? 0);
+    this.frame = requestAnimationFrame(() => this.fillRows());
+  }
+  /**
+   * On automatic rows in a sections view, the card takes the whole rows its content needs, or the half rows with
+   * `row_step: half`, so the cards under it stay on the rows. The content is measured by its own size, never by the
+   * parts that grow to fill the card: the list's last row, and the big card's avatar and texts, which sit in the middle
+   * of a player that grows. What a whole row leaves over goes under the list's title, measured out of the content
+   * again each time, and in the big card to the player, which grows to take it.
+   */
+  fillRows() {
+    const card = this.renderRoot.querySelector("ha-card");
+    if (!card || !card.clientWidth || this.layout !== "grid" || this.heightStyle()) {
+      if (this.filled) this.filled = 0;
+      if (this.spare) this.spare = 0;
+      return;
+    }
+    const style = getComputedStyle(card);
+    const borders = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+    let content;
+    const player = card.querySelector(":scope > .player.big");
+    const header = card.querySelector(":scope > .card-header");
+    if (player) {
+      const own = getComputedStyle(player);
+      const inner = [...player.querySelectorAll(":scope > .avatar-wrap, :scope > .details")].map(
+        (part) => part.getBoundingClientRect().height
+      );
+      content = borders + (parseFloat(own.paddingTop) || 0) + Math.max(0, ...inner) + (parseFloat(own.paddingBottom) || 0);
+    } else {
+      const list = card.querySelector(":scope > .list");
+      const last = list?.lastElementChild ?? list ?? card.lastElementChild;
+      if (!last) return;
+      const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
+      content = last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) - shown;
+    }
+    const filled = filledHeight(Math.round(content), this.config ?? {});
+    const spare = header ? Math.max(0, Math.floor(filled - content)) : 0;
+    if (filled !== this.filled) this.filled = filled;
+    if (spare !== this.spare) this.spare = spare;
   }
   heightStyle() {
     return heightStyle(this.config ?? {}, this.layout, this.minimumHeight());
@@ -1475,14 +1582,16 @@ var SteamCardCompact = class extends i4 {
     const wanted = this.wanted();
     const players = wanted.map((id) => hass.states[id]).filter((entity) => entity !== void 0).map((entity) => readPlayer(hass, entity));
     const missing = wanted.filter((id) => hass.states[id] === void 0);
-    const style = this.heightStyle();
+    const held = this.heightStyle();
+    const style = held || (this.filled ? `min-height: ${this.filled}px; --steam-spare: ${this.spare}px` : "");
     if (this.single()) {
-      return b2`<ha-card class="big-card" style=${style}>
+      return b2`<ha-card class="big-card ${held ? "held" : ""}" style=${style}>
                 ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
             </ha-card>`;
     }
-    return b2`<ha-card style=${style}>
-            <div class="card-header">${this.config?.title || this.text("common.title")}</div>
+    const title = this.config?.title || this.text("common.title");
+    return b2`<ha-card class=${held ? "held" : ""} style=${style}>
+            <div class="card-header" title=${title}>${title}</div>
             <div class="list">${this.listRows(players, missing)}</div>
         </ha-card>`;
   }
@@ -1510,9 +1619,8 @@ var SteamCardCompact = class extends i4 {
                 ${playing && this.gameBackground && header && !this.failed.has(header) ? b2`<img src=${header} class="row-picture" alt="" @error=${() => this.fail(header)} />` : A}
                 ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
-                    ${playing ? this.gameLine(player) : A}
-                    ${player.entity.state === "offline" ? b2`<div class="seen">${this.lastSeen(player)}</div>` : A}
+                    ${this.nameLine(player)} ${playing ? this.gameLine(player) : A}
+                    ${player.entity.state === "offline" ? b2`<div class="seen" title=${this.lastSeen(player)}>${this.lastSeen(player)}</div>` : A}
                 </div>
             `
     );
@@ -1527,8 +1635,8 @@ var SteamCardCompact = class extends i4 {
       b2`
                 ${this.gameBackground ? playing ? this.gameArt(player) : STEAM_LOGO : A} ${this.avatar(player)}
                 <div class="details">
-                    <div class="name">${displayName(player.entity, this.config?.name_overrides)}</div>
-                    <div class="seen">${state}</div>
+                    ${this.nameLine(player)}
+                    <div class="seen" title=${state}>${state}</div>
                     ${playing ? this.gameLine(player) : A}
                 </div>
             `
@@ -1595,10 +1703,16 @@ var SteamCardCompact = class extends i4 {
                   @keydown=${(event) => event.stopPropagation()}
                   >${player.game}</a
               >` : b2`<span class="game-name">${player.game}</span>`;
-    return b2`<div class="game">
+    const played = time ? `\xB7 ${this.duration(time)}` : "";
+    return b2`<div class="game" title=${played ? `${player.game ?? ""} ${played}` : player.game ?? ""}>
             ${player.gameIcon ? b2`<img src=${player.gameIcon} class="game-icon" alt="" />` : A}${name}
-            ${time ? b2`<span class="play-time">· ${this.duration(time)}</span>` : A}
+            ${played ? b2`<span class="play-time">${played}</span>` : A}
         </div>`;
+  }
+  /** The player's name, with the whole of it as a tooltip, as a held card cuts it short. */
+  nameLine(player) {
+    const name = displayName(player.entity, this.config?.name_overrides);
+    return b2`<div class="name" title=${name}>${name}</div>`;
   }
   /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */
   avatar(player) {
@@ -1680,9 +1794,10 @@ var SteamCardCompact = class extends i4 {
                     padding: 0;
                 }
 
+                /* What a whole row leaves over goes under the title */
                 .card-header {
                     flex: none;
-                    padding: 0 0 8px 0;
+                    padding: 0 0 calc(8px + var(--steam-spare, 0px)) 0;
                     font-size: var(--ha-card-header-font-size, 24px);
                     line-height: 1.2;
                     overflow-wrap: anywhere;
@@ -1741,13 +1856,14 @@ var SteamCardCompact = class extends i4 {
                     }
                 }
 
-                /* With a height of its own, the big card's player and picture fill all of it. */
+                /* With a height of its own, the big card's player and picture fill all of it. Its border, padding and avatar
+                   come to one and a half rows of a sections view, which texts that wrap make taller. */
                 .player.big {
                     flex: 1 1 auto;
                     width: 100%;
-                    min-height: 88px;
+                    min-height: 86px;
                     gap: 12px;
-                    padding: 12px 16px 14px 16px;
+                    padding: 10px 16px 12px 16px;
                     border-radius: var(--ha-card-border-radius, 12px);
                 }
 
@@ -1816,7 +1932,7 @@ var SteamCardCompact = class extends i4 {
                     flex: 1 1 auto;
                 }
 
-                /* Names and games wrap rather than end in an ellipsis */
+                /* Names and games wrap rather than end in an ellipsis, unless the card is held to a height */
                 .name {
                     font-weight: 600;
                     overflow-wrap: anywhere;
@@ -1840,6 +1956,16 @@ var SteamCardCompact = class extends i4 {
                 .big .game {
                     font-size: 14px;
                     margin-top: 2px;
+                }
+
+                /* Held to a height, each text keeps to one line and ends in an ellipsis, its whole text in its tooltip */
+                ha-card.held .card-header,
+                ha-card.held .name,
+                ha-card.held .seen,
+                ha-card.held .game {
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
                 }
 
                 .game-icon {
@@ -2052,6 +2178,12 @@ __decorateClass([
 __decorateClass([
   r5()
 ], SteamCardCompact.prototype, "failed", 2);
+__decorateClass([
+  r5()
+], SteamCardCompact.prototype, "filled", 2);
+__decorateClass([
+  r5()
+], SteamCardCompact.prototype, "spare", 2);
 SteamCardCompact = __decorateClass([
   t3("steam-card-compact")
 ], SteamCardCompact);
