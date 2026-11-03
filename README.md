@@ -25,9 +25,8 @@ store.
 
 ### With HACS
 
-1. Add this repository to HACS custom repositories with type **Dashboard**
-2. Search for Steam card compact in HACS and download it
-3. Refresh your browser
+1. Search for Steam card compact in HACS and download it
+2. Refresh your browser
 
 ### Manual
 
@@ -185,6 +184,6 @@ MIT, see [LICENSE](LICENSE).
 [releases-shield]: https://img.shields.io/github/release/jesmak/steam-card-compact.svg?style=for-the-badge
 [release-date-shield]: https://img.shields.io/github/release-date/jesmak/steam-card-compact?style=for-the-badge
 [releases]: https://github.com/jesmak/steam-card-compact/releases
-[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
-[hacs]: https://hacs.xyz/docs/faq/custom_repositories/
+[hacs-shield]: https://img.shields.io/badge/HACS-Default-green.svg?style=for-the-badge
+[hacs]: https://my.home-assistant.io/redirect/hacs_repository/?owner=jesmak&repository=steam-card-compact&category=plugin
 [license-shield]: https://img.shields.io/github/license/jesmak/steam-card-compact.svg?style=for-the-badge
