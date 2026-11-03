@@ -571,6 +571,9 @@ describe("filling the rows of a sections view", () => {
         ["the big card whose border puts it over a half row", { ...one, row_step: "half" }, "grid", { details: 66 }, filled(120, 0)],
         ["a missing player's big card", { entity: "sensor.steam_gone" }, "grid", { end: 40, padding: 0 }, filled(56, 0)],
         ["a list held to a height", { ...list, height_mode: "fixed", height: 300 }, "grid", { end: 107 }, "height: 300px"],
+        ["a list up to a limit, under it", { ...list, max_height: 400 }, "grid", { end: 107 }, `max-height: 376px; ${filled(184, 60)}`],
+        ["a list up to a limit, over it", { ...list, max_height: 400 }, "grid", { end: 500 }, `max-height: 376px; ${filled(376, 0)}`],
+        ["a list up to a limit outside a sections view", { ...list, max_height: 400 }, undefined, { end: 107 }, "max-height: 400px"],
         ["a list outside a sections view", list, undefined, { end: 107 }, ""],
     ])("%s", async (_name, config, layout, laid, style) => {
         const element = await card(two, config, layout);

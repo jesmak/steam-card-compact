@@ -32,7 +32,7 @@ import type { HassEntity, HomeAssistant } from "./hass";
 import { gridMinRows, heightCardSize, heightStyle, validHeight } from "./height";
 import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
-import { filledHeight, validRowStep } from "./rows";
+import { fillLimit, filledHeight, filledStyle, validRowStep } from "./rows";
 import type { SteamCardCompactConfig } from "./types";
 
 console.info(
@@ -223,14 +223,16 @@ export class SteamCardCompact extends LitElement {
 
     /**
      * On automatic rows in a sections view, the card takes the whole rows its content needs, or the half rows with
-     * `row_step: half`, so the cards under it stay on the rows. The content is measured by its own size, never by the
+     * `row_step: half`, so the cards under it stay on the rows, up to the limit of a card that grows up to one. The
+     * content is measured by its own size, never by the
      * parts that grow to fill the card: the list's last row, and the big card's avatar and texts, which sit in the middle
      * of a player that grows. What a whole row leaves over goes under the list's title, measured out of the content
      * again each time, and in the big card to the player, which grows to take it.
      */
     private fillRows(): void {
         const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
-        if (!card || !card.clientWidth || this.layout !== "grid" || this.heightStyle()) {
+        const limit = fillLimit(this.config ?? {}, this.layout, this.minimumHeight());
+        if (!card || !card.clientWidth || !limit) {
             if (this.filled) this.filled = 0;
             if (this.spare) this.spare = 0;
             return;
@@ -259,7 +261,7 @@ export class SteamCardCompact extends LitElement {
                 (parseFloat(style.borderBottomWidth) || 0) -
                 shown;
         }
-        const filled = filledHeight(Math.round(content), this.config ?? {});
+        const filled = filledHeight(Math.round(content), this.config ?? {}, limit);
         const spare = header ? Math.max(0, Math.floor(filled - content)) : 0;
         if (filled !== this.filled) this.filled = filled;
         if (spare !== this.spare) this.spare = spare;
@@ -329,7 +331,8 @@ export class SteamCardCompact extends LitElement {
 
         // Held to a height, every text keeps to one line, so the card's height doesn't follow how long a game's name is
         const held = this.heightStyle();
-        const style = held || (this.filled ? `min-height: ${this.filled}px; --steam-spare: ${this.spare}px` : "");
+        const filled = filledStyle(this.config ?? {}, this.layout, this.minimumHeight(), this.filled);
+        const style = this.filled ? `${filled}; --steam-spare: ${this.spare}px` : filled;
         if (this.single()) {
             return html`<ha-card class="big-card ${held ? "held" : ""}" style=${style}>
                 ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}
