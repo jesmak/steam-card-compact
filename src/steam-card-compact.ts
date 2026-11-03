@@ -6,6 +6,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 
 import { GestureDetector, isTappable } from "./actions";
 import type { Gesture } from "./actions";
@@ -61,6 +62,16 @@ registry.customCards.push({
 /** The gap under the list's title, to which the spare room of a whole row is added. */
 const HEADER_GAP_PX = 8;
 
+/**
+ * Room for a measure read in fractions of a pixel, so a text exactly as wide as its room still fits. Smaller than the
+ * 1/64 px a browser lays out in.
+ */
+const SLACK_PX = 0.01;
+
+function px(value: string | undefined): number {
+    return Number.parseFloat(value ?? "") || 0;
+}
+
 @customElement("steam-card-compact")
 export class SteamCardCompact extends LitElement {
     @property({ attribute: false }) public hass?: HomeAssistant;
@@ -71,6 +82,8 @@ export class SteamCardCompact extends LitElement {
     // On automatic rows in a sections view: the card's height on the rows, and what it leaves over under the title
     @state() private filled = 0;
     @state() private spare = 0;
+    // As last measured, whether the list puts one player to a row, on a card not held
+    @state() private oneARow = false;
     private readonly gestures = new Map<string, GestureDetector>();
     private timer?: ReturnType<typeof setInterval>;
     private frame?: number;
@@ -153,7 +166,59 @@ export class SteamCardCompact extends LitElement {
 
     private fillRowsSoon(): void {
         cancelAnimationFrame(this.frame ?? 0);
-        this.frame = requestAnimationFrame(() => this.fillRows());
+        this.frame = requestAnimationFrame(() => {
+            this.measureRows();
+            this.fillRows();
+        });
+    }
+
+    /**
+     * Puts the list's players one to a row only when two don't fit side by side: when the longest word of a player's
+     * name, game or last seen time is wider than the room half a row leaves it, or the player would be taller there than
+     * on a row of its own. The play time is left out of the heights, as it may go under its game by design. Then every
+     * row, so the list keeps one layout. The list is held to its drawn height meanwhile, its overflow clipped, so nothing
+     * around it moves. Held, the card keeps its container query instead, as its texts are cut short on one line and can't
+     * tell whether they fit.
+     */
+    private measureRows(): void {
+        const list = this.renderRoot.querySelector<HTMLElement>("ha-card > .list");
+        const players = list ? [...list.querySelectorAll<HTMLElement>(":scope > .user-row > .player")] : [];
+        if (!list?.clientWidth || this.heightStyle() || !players.length) return;
+        // A player is as tall as its avatar or its texts, whichever is taller, as a row stretches the shorter one
+        const heights = (): number[] => {
+            list.classList.add("timeless");
+            const found = players.map((player) =>
+                Math.max(
+                    0,
+                    ...[...player.querySelectorAll<HTMLElement>(":scope > .avatar-wrap, :scope > .details")].map((part) =>
+                        px(getComputedStyle(part).height),
+                    ),
+                ),
+            );
+            list.classList.remove("timeless");
+            return found;
+        };
+        const details = players.map((player) => player.querySelector<HTMLElement>(":scope > .details"));
+        const was = list.classList.contains("one-a-row");
+        // A computed height has six significant digits, which can fall short of the 1/64 px a browser lays out in, and the
+        // list held to that would shrink by a fraction while it is measured. So it is held to the 1/64 px it rounds to.
+        list.style.height = `${Math.round(px(getComputedStyle(list).height) * 64) / 64}px`;
+        list.style.overflow = "hidden";
+        list.style.overflowAnchor = "none";
+        list.classList.remove("one-a-row");
+        const paired = heights();
+        const rooms = details.map((part) => (part ? px(getComputedStyle(part).width) : 0));
+        list.classList.add("measuring");
+        const words = details.map((part) => (part ? px(getComputedStyle(part).width) : 0));
+        list.classList.remove("measuring");
+        list.classList.add("one-a-row");
+        const alone = heights();
+        const oneARow = players.some((_, i) => words[i] > rooms[i] + SLACK_PX || paired[i] > alone[i] + SLACK_PX);
+        list.classList.toggle("one-a-row", was);
+        list.style.height = "";
+        list.style.overflow = "";
+        list.style.overflowAnchor = "";
+        if (oneARow !== this.oneARow) this.oneARow = oneARow;
     }
 
     /**
@@ -273,7 +338,7 @@ export class SteamCardCompact extends LitElement {
         const title = this.config?.title || this.text("common.title");
         return html`<ha-card class=${held ? "held" : ""} style=${style}>
             <div class="card-header" title=${title}>${title}</div>
-            <div class="list">${this.listRows(players, missing)}</div>
+            <div class="list ${classMap({ "one-a-row": this.oneARow && !held })}">${this.listRows(players, missing)}</div>
         </ha-card>`;
     }
 
@@ -461,8 +526,12 @@ export class SteamCardCompact extends LitElement {
             return "";
         }
         // "1 day", not "1 days": the units of one have texts of their own
-        const unit = since.amount === 1 ? `time_units.one_${since.unit}` : `time_units.${since.unit}`;
-        return this.text("common.last_seen", { amount: String(since.amount), unit: this.text(unit) });
+        const unit = this.text(since.amount === 1 ? `time_units.one_${since.unit}` : `time_units.${since.unit}`);
+        // The number and its unit never wrap apart
+        return this.text("common.last_seen", { amount: String(since.amount), unit }).replace(
+            `${since.amount} ${unit}`,
+            `${since.amount}\u00a0${unit}`,
+        );
     }
 
     private duration(time: { hours: number; minutes: number }): string {
@@ -562,15 +631,39 @@ export class SteamCardCompact extends LitElement {
                     outline-offset: -2px;
                 }
 
-                /* Narrow: one player a row, so a name and a game get the card's width instead of half of it */
+                /* One player a row, so a name and a game get the card's width instead of half of it: when a player's
+                   texts would break a word or take more lines two to a row, as measured, and on a held card below 400 px
+                   of content (434 px of card) */
+                .list.one-a-row .user-row {
+                    flex-direction: column;
+                    gap: 0;
+                }
+                .list.one-a-row .user-row .player {
+                    width: 100%;
+                }
                 @container (max-width: 400px) {
-                    .user-row {
+                    ha-card.held .user-row {
                         flex-direction: column;
                         gap: 0;
                     }
-                    .user-row .player {
+                    ha-card.held .user-row .player {
                         width: 100%;
                     }
+                }
+
+                /* Measuring the heights: without the play time, which may go under its game */
+                .list.timeless .play-time {
+                    display: none;
+                }
+
+                /* Measuring: each player's texts at their longest word, never broken inside one */
+                .list.measuring .details {
+                    flex: none;
+                    width: min-content;
+                }
+                .list.measuring .name,
+                .list.measuring .game {
+                    overflow-wrap: normal;
                 }
 
                 /* With a height of its own, the big card's player and picture fill all of it. Its border, padding and avatar
@@ -689,14 +782,14 @@ export class SteamCardCompact extends LitElement {
                     width: 16px;
                     height: 16px;
                     border-radius: 3px;
-                    margin-right: 4px;
+                    margin-inline-end: 4px;
                     vertical-align: -3px;
                 }
 
                 .big .game-icon {
                     width: 20px;
                     height: 20px;
-                    margin-right: 5px;
+                    margin-inline-end: 5px;
                     vertical-align: -5px;
                 }
 

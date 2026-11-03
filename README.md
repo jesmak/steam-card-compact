@@ -79,9 +79,11 @@ stands in.
 ## Sizes
 
 In a sections view the card is the section's full width by default, as tall as its contents rounded up to rows (see
-`row_step`), and can be made as narrow as half the section. Below 435 px the list puts one player to a row, so names
-and games get the width. Below 360 px one player's own card leaves the game's logo out. Names and games wrap instead
-of being cut short.
+`row_step`), and can be made as narrow as half the section. The list puts every player on a row of their own, so names
+and games get the width, when two side by side would break a word of a name, a game or a last seen time, or make a
+player taller than on a row of their own. A game's play time may still go under the game. Held to a height, the list
+does that below 435 px. Below 360 px one player's own card leaves the game's logo out. Names and games wrap instead of
+being cut short.
 
 Held to a height, the list's title and every name, game and last seen time keep to one line, cut short with an
 ellipsis when they are longer, with the whole of each in a tooltip. So a long title or game's name never makes the card

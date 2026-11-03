@@ -204,14 +204,14 @@ describe("the single player card", () => {
         const seconds = new Date(Date.now() - 30_000).toISOString();
         const state = hass(player("sensor.steam_abc", { state: "offline", last_online: seconds }));
         const root = shadow(await card(state, { entity: "sensor.steam_abc" }));
-        expect(root.querySelector(".seen")?.textContent?.trim()).toBe("Last seen 30 s ago");
+        expect(root.querySelector(".seen")?.textContent?.trim()).toBe("Last seen 30\u00a0s ago");
     });
 
     it("says one day, not one days", async () => {
         const day = new Date(Date.now() - 30 * 3600_000).toISOString();
         const state = hass(player("sensor.steam_abc", { state: "offline", last_online: day }));
         const root = shadow(await card(state, { entity: "sensor.steam_abc" }));
-        expect(root.querySelector(".seen")?.textContent?.trim()).toBe("Last seen 1 day ago");
+        expect(root.querySelector(".seen")?.textContent?.trim()).toBe("Last seen 1\u00a0day ago");
     });
 
     it("calls a state Steam doesn't report unavailable, rather than showing a key", async () => {
