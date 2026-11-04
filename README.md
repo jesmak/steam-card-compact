@@ -2,7 +2,7 @@
 
 Home Assistant dashboard card that shows what your Steam friends are playing.
 
-[![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases] [![HACS][hacs-shield]][hacs] [![License][license-shield]](LICENSE)
+[![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases] [![Marketplace][marketplace-shield]][marketplace] [![License][license-shield]](LICENSE)
 
 <p>
 <img src="https://raw.githubusercontent.com/jesmak/steam-card-compact/main/docs/images/list-light.png#gh-light-mode-only" width="400" alt="A list of six players: two in a game, one for an hour and twenty minutes and one for twelve minutes, with the games' pictures behind them, then one online, one snoozing and two offline with the time they were last seen">
@@ -23,10 +23,11 @@ store.
 
 ## Installation
 
-### With HACS
+### With the Marketplace
 
-1. Search for Steam card compact in HACS and download it
-2. Refresh your browser
+1. Open Settings › Marketplace and search for Steam card compact
+2. Open it and choose Install
+3. Refresh your browser
 
 ### Manual
 
@@ -156,7 +157,7 @@ npm run check
 ```
 
 `npm run check` typechecks, lints, checks formatting, runs the tests and builds `dist/steam-card-compact.js`, which is
-the file HACS installs and is committed to the repository.
+the file the Marketplace installs and is committed to the repository.
 
 | Path                        | What it contains                                                         |
 | --------------------------- | ------------------------------------------------------------------------ |
@@ -188,6 +189,6 @@ MIT, see [LICENSE](LICENSE).
 [releases-shield]: https://img.shields.io/github/release/jesmak/steam-card-compact.svg?style=for-the-badge
 [release-date-shield]: https://img.shields.io/github/release-date/jesmak/steam-card-compact?style=for-the-badge
 [releases]: https://github.com/jesmak/steam-card-compact/releases
-[hacs-shield]: https://img.shields.io/badge/HACS-Default-green.svg?style=for-the-badge
-[hacs]: https://my.home-assistant.io/redirect/hacs_repository/?owner=jesmak&repository=steam-card-compact&category=plugin
+[marketplace-shield]: https://img.shields.io/badge/Marketplace-Default-green.svg?style=for-the-badge
+[marketplace]: https://my.home-assistant.io/redirect/marketplace_repository/?owner=jesmak&repository=steam-card-compact&category=plugin
 [license-shield]: https://img.shields.io/github/license/jesmak/steam-card-compact.svg?style=for-the-badge
