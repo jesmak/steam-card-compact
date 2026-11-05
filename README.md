@@ -124,11 +124,6 @@ tap_action:
   url_path: https://steamcommunity.com/id/matti-example
 ```
 
-## Upgrading from 1.x
-
-The card keeps its configuration, so nothing has to change. One named player still gets a card of their own, and a list
-stays a list.
-
 ## Data
 
 Everything comes from Home Assistant's Steam integration. For each player it creates a device with a sensor for their
@@ -136,7 +131,8 @@ state, and sensors for the game they are playing, their level and when they were
 The card finds them through the player's device, so it needs nothing but the player's own sensor.
 
 On a Home Assistant from before those sensors and pictures, the card reads the same values from the player's sensor's
-attributes. Those attributes go away in Home Assistant 2027.2, and by then the card has long stopped needing them.
+attributes. Home Assistant has deprecated those attributes and may remove them in 2027.2, and the card reads them only
+when the player's device has no such sensors.
 
 The game's pictures and icon come from Steam through Home Assistant.
 

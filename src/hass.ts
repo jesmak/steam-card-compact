@@ -20,6 +20,8 @@ export interface HomeAssistant {
     entities?: Record<string, EntityRegistryEntry | undefined>;
     language?: string;
     locale?: { language?: string };
+    /** An entity's name as Home Assistant composes it from the parts given. Older frontends don't have it. */
+    formatEntityName?: (entity: HassEntity, parts: Array<{ type: "entity" | "device" | "area" | "floor" }>) => string;
 }
 
 export interface LovelaceCardConfig {

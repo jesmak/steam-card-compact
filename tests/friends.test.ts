@@ -34,29 +34,42 @@ function player(values: Partial<HassEntity> & { name?: string; game?: string } =
 describe("what a player is called", () => {
     it("is the name the configuration gives", () => {
         const one = entity({ entity_id: "sensor.steam_abc", name: "Friendly" });
-        expect(displayName(one, [{ entity: "sensor.steam_abc", name: "ABC-MAN" }])).toBe("ABC-MAN");
+        expect(displayName({}, one, [{ entity: "sensor.steam_abc", name: "ABC-MAN" }])).toBe("ABC-MAN");
     });
 
     it("is the entity’s own name when the configuration says nothing", () => {
-        expect(displayName(entity({ name: "Friendly" }), [])).toBe("Friendly");
-        expect(displayName(entity({ name: "Friendly" }), undefined)).toBe("Friendly");
+        expect(displayName({}, entity({ name: "Friendly" }), [])).toBe("Friendly");
+        expect(displayName({}, entity({ name: "Friendly" }), undefined)).toBe("Friendly");
+    });
+
+    it("is the name Home Assistant composes from the device's and the entity's, ahead of the friendly name", () => {
+        const formatEntityName = (state: HassEntity, parts: Array<{ type: string }>) =>
+            parts.map((part) => part.type).join("+") === "device+entity" ? `Composed ${state.entity_id}` : "";
+        expect(displayName({ formatEntityName }, entity({ name: "Friendly" }), undefined)).toBe("Composed sensor.steam_one");
+        expect(displayName({ formatEntityName }, entity({ name: "Friendly" }), [{ entity: "sensor.steam_one", name: "Mine" }])).toBe(
+            "Mine",
+        );
+    });
+
+    it("is the friendly name when Home Assistant composes nothing", () => {
+        expect(displayName({ formatEntityName: () => "" }, entity({ name: "Friendly" }), undefined)).toBe("Friendly");
     });
 
     it("falls back to the entity id when there is no name at all", () => {
         const one = { entity_id: "sensor.steam_x", state: "online", attributes: {} } as HassEntity;
-        expect(displayName(one, undefined)).toBe("sensor.steam_x");
+        expect(displayName({}, one, undefined)).toBe("sensor.steam_x");
     });
 
     it("orders players by the name that is shown", () => {
         const one = player({ entity_id: "sensor.steam_a", name: "Zeta" });
         const other = player({ entity_id: "sensor.steam_b", name: "Alpha" });
         const overrides = [{ entity: "sensor.steam_a", name: "Aaa" }];
-        expect(sortByName([one, other], overrides).map((item) => item.entity.entity_id)).toEqual(["sensor.steam_a", "sensor.steam_b"]);
+        expect(sortByName({}, [one, other], overrides).map((item) => item.entity.entity_id)).toEqual(["sensor.steam_a", "sensor.steam_b"]);
     });
 
     it("leaves the given list alone", () => {
         const list = [player({ entity_id: "b", name: "B" }), player({ entity_id: "a", name: "A" })];
-        sortByName(list, undefined);
+        sortByName({}, list, undefined);
         expect(list[0].entity.entity_id).toBe("b");
     });
 });

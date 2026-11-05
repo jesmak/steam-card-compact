@@ -907,12 +907,13 @@ function readPlayer(hass, entity) {
     logo: image("library_logo")
   };
 }
-function displayName(entity, overrides) {
+function displayName(hass, entity, overrides) {
   const override = overrides?.find((item) => item?.entity === entity.entity_id)?.name;
-  return override || String(entity.attributes.friendly_name ?? entity.entity_id);
+  return override || hass.formatEntityName?.(entity, [{ type: "device" }, { type: "entity" }]) || String(entity.attributes.friendly_name ?? entity.entity_id);
 }
-function sortByName(players, overrides) {
-  return [...players].sort((one, other) => displayName(one.entity, overrides).localeCompare(displayName(other.entity, overrides)));
+function sortByName(hass, players, overrides) {
+  const names = new Map(players.map((player) => [player, displayName(hass, player.entity, overrides)]));
+  return [...players].sort((one, other) => names.get(one).localeCompare(names.get(other)));
 }
 function inGame(player) {
   return player.game !== void 0 && player.entity.state !== "offline" && player.entity.state !== "unavailable";
@@ -1669,7 +1670,7 @@ var SteamCardCompact = class extends i4 {
         </ha-card>`;
   }
   listRows(players, missing) {
-    const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
+    const groups = groupByStatus(sortByName(this.hass, players, this.config?.name_overrides));
     const rows = [];
     for (const status of STATUSES) {
       const group = groups[status];
@@ -1784,7 +1785,7 @@ var SteamCardCompact = class extends i4 {
   }
   /** The player's name, with the whole of it as a tooltip, as a held card cuts it short. */
   nameLine(player) {
-    const name = displayName(player.entity, this.config?.name_overrides);
+    const name = displayName(this.hass, player.entity, this.config?.name_overrides);
     return b2`<div class="name" title=${name}>${name}</div>`;
   }
   /** The avatar, ringed in the colour of the player's state, with their Steam level in the corner. */

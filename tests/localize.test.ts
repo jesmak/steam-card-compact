@@ -33,10 +33,15 @@ describe("languages", () => {
         expect(keys(language(code)).filter((key) => !english.has(key))).toEqual([]);
     });
 
+    it.each(LANGUAGE_CODES.filter((code) => code !== "en"))("%s has every key English has", (code) => {
+        const own = new Set(keys(language(code)));
+        expect(keys(language("en")).filter((key) => !own.has(key))).toEqual([]);
+    });
+
     it("fall back to English for a text a language lacks, and to the key for one nobody has", () => {
         expect(translate("fi", "statuses.online")).toBe("Paikalla");
         expect(translate("fi-FI", "statuses.online")).toBe("Paikalla");
-        expect(translate("sv", "statuses.away")).toBe("Away");
+        expect(translate("xx", "statuses.away")).toBe("Away");
         expect(translate("fi", "no.such.key")).toBe("no.such.key");
     });
 });

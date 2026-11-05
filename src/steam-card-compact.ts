@@ -351,7 +351,7 @@ export class SteamCardCompact extends LitElement {
     }
 
     private listRows(players: Player[], missing: string[]): TemplateResult[] {
-        const groups = groupByStatus(sortByName(players, this.config?.name_overrides));
+        const groups = groupByStatus(sortByName(this.hass!, players, this.config?.name_overrides));
         const rows: TemplateResult[] = [];
         for (const status of STATUSES) {
             const group = groups[status];
@@ -484,7 +484,7 @@ export class SteamCardCompact extends LitElement {
 
     /** The player's name, with the whole of it as a tooltip, as a held card cuts it short. */
     private nameLine(player: Player): TemplateResult {
-        const name = displayName(player.entity, this.config?.name_overrides);
+        const name = displayName(this.hass!, player.entity, this.config?.name_overrides);
         return html`<div class="name" title=${name}>${name}</div>`;
     }
 

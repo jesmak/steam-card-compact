@@ -120,6 +120,10 @@ describe("the list card", () => {
     it("has a title of its own in the viewer's language, or the one it was given", async () => {
         const plain = shadow(await card(hass(player("sensor.steam_abc")), { entity: ["sensor.steam_abc"] }));
         expect(plain.querySelector(".card-header")?.textContent).toContain("Steam friends");
+        const finnish = shadow(
+            await card({ ...hass(player("sensor.steam_abc")), locale: { language: "fi" } }, { entity: ["sensor.steam_abc"] }),
+        );
+        expect(finnish.querySelector(".card-header")?.textContent).toContain("Steam-kaverit");
         const given = shadow(await card(hass(player("sensor.steam_abc")), { entity: ["sensor.steam_abc"], title: "Steam buddies" }));
         expect(given.querySelector(".card-header")?.textContent).toContain("Steam buddies");
     });
@@ -181,6 +185,25 @@ describe("the new entities of the integration", () => {
         element.hass = { ...state, states: { ...state.states, [playing.entity_id]: playing } };
         await element.updateComplete;
         expect(groupsOf(shadow(element))).toEqual(["In game"]);
+    });
+});
+
+describe("a player's name", () => {
+    // Home Assistant composes a name from the device's and the entity's, and the card shows and sorts by it.
+    function composed(state: HomeAssistant): HomeAssistant {
+        return { ...state, formatEntityName: (entity) => `Composed ${entity.entity_id.replace("sensor.steam_", "")}` };
+    }
+
+    it("is the one Home Assistant composes, in the list and sorted by it", async () => {
+        const state = composed(hass(player("sensor.steam_abc"), player("sensor.steam_def")));
+        state.formatEntityName = (entity) => (entity.entity_id === "sensor.steam_abc" ? "Zed" : "Amy");
+        const root = shadow(await card(state, { entity: ["sensor.steam_abc", "sensor.steam_def"] }));
+        expect([...root.querySelectorAll(".name")].map((node) => node.textContent?.trim())).toEqual(["Amy", "Zed"]);
+    });
+
+    it("is the one Home Assistant composes on one player's own card", async () => {
+        const root = shadow(await card(composed(hass(player("sensor.steam_abc"))), { entity: "sensor.steam_abc" }));
+        expect(root.querySelector(".player.big .name")?.textContent?.trim()).toBe("Composed abc");
     });
 });
 
@@ -327,11 +350,6 @@ describe("tapping a player", () => {
 });
 
 describe("the layout", () => {
-    it("draws the big card for one named player, as it always did", async () => {
-        const root = shadow(await card(hass(player("sensor.steam_abc")), { entity: "sensor.steam_abc" }));
-        expect(root.querySelector(".player.big")).not.toBeNull();
-    });
-
     it("lists a single player when the list is asked for", async () => {
         const root = shadow(await card(hass(player("sensor.steam_abc")), { entity: "sensor.steam_abc", layout: "list" }));
         expect(root.querySelector(".player.big")).toBeNull();

@@ -105,8 +105,8 @@ function pictureOf(entity: HassEntity): string | undefined {
 
 /**
  * A player, read from the integration's own entities of their device: now playing, level, last online and the
- * game's pictures. The same values as attributes of the player's sensor are deprecated and go in Home Assistant
- * 2027.2, so they are read only when the device has no such entity, as on a Home Assistant from before them.
+ * game's pictures. The same values as attributes of the player's sensor are deprecated and may be removed in Home
+ * Assistant 2027.2, so they are read only when the device has no such entity, as on a Home Assistant from before them.
  */
 export function readPlayer(hass: HomeAssistant, entity: HassEntity): Player {
     const own = siblings(hass, entity.entity_id);
@@ -142,14 +142,21 @@ export function readPlayer(hass: HomeAssistant, entity: HassEntity): Player {
     };
 }
 
-/** What a player is called: the name the configuration gives, else the entity's own. */
-export function displayName(entity: HassEntity, overrides: NameOverride[] | undefined): string {
+type Namer = Pick<HomeAssistant, "formatEntityName">;
+
+/** What a player is called: the name the configuration gives, else the entity's own as Home Assistant composes it. */
+export function displayName(hass: Namer, entity: HassEntity, overrides: NameOverride[] | undefined): string {
     const override = overrides?.find((item) => item?.entity === entity.entity_id)?.name;
-    return override || String(entity.attributes.friendly_name ?? entity.entity_id);
+    return (
+        override ||
+        hass.formatEntityName?.(entity, [{ type: "device" }, { type: "entity" }]) ||
+        String(entity.attributes.friendly_name ?? entity.entity_id)
+    );
 }
 
-export function sortByName(players: Player[], overrides: NameOverride[] | undefined): Player[] {
-    return [...players].sort((one, other) => displayName(one.entity, overrides).localeCompare(displayName(other.entity, overrides)));
+export function sortByName(hass: Namer, players: Player[], overrides: NameOverride[] | undefined): Player[] {
+    const names = new Map(players.map((player) => [player, displayName(hass, player.entity, overrides)]));
+    return [...players].sort((one, other) => names.get(one)!.localeCompare(names.get(other)!));
 }
 
 /** Whether a player is in a game now: Steam keeps the last game of a player who went offline. */

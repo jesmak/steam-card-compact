@@ -11,7 +11,7 @@ const HOLD_MS = 500;
 const DOUBLE_TAP_MS = 250;
 
 /** An action that does something: one that is missing or `none` does nothing. */
-export function hasAction(action: ActionConfig | undefined): boolean {
+function hasAction(action: ActionConfig | undefined): boolean {
     return action !== undefined && action.action !== "none";
 }
 
