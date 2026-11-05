@@ -2,7 +2,7 @@
 
 Home Assistant dashboard card that shows what your Steam friends are playing.
 
-[![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases] [![Marketplace][marketplace-shield]][marketplace] [![License][license-shield]](LICENSE)
+[![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases] [![Downloads][downloads-shield]][releases] [![Marketplace][marketplace-shield]][marketplace] [![License][license-shield]](LICENSE)
 
 <p>
 <img src="https://raw.githubusercontent.com/jesmak/steam-card-compact/main/docs/images/list-light.png#gh-light-mode-only" width="400" alt="A list of six players: two in a game, one for an hour and twenty minutes and one for twelve minutes, with the games' pictures behind them, then one online, one snoozing and two offline with the time they were last seen">
@@ -185,6 +185,7 @@ MIT, see [LICENSE](LICENSE).
 [releases-shield]: https://img.shields.io/github/release/jesmak/steam-card-compact.svg?style=for-the-badge
 [release-date-shield]: https://img.shields.io/github/release-date/jesmak/steam-card-compact?style=for-the-badge
 [releases]: https://github.com/jesmak/steam-card-compact/releases
+[downloads-shield]: https://img.shields.io/github/downloads/jesmak/steam-card-compact/total.svg?style=for-the-badge
 [marketplace-shield]: https://img.shields.io/badge/Marketplace-Default-green.svg?style=for-the-badge
 [marketplace]: https://my.home-assistant.io/redirect/marketplace_repository/?owner=jesmak&repository=steam-card-compact&category=plugin
 [license-shield]: https://img.shields.io/github/license/jesmak/steam-card-compact.svg?style=for-the-badge
