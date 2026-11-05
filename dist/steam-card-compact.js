@@ -1512,8 +1512,9 @@ var SteamCardCompact = class extends i4 {
   fillRowsSoon() {
     cancelAnimationFrame(this.frame ?? 0);
     this.frame = requestAnimationFrame(() => {
-      this.measureRows();
-      this.fillRows();
+      if (this.measureRows()) {
+        this.fillRows();
+      }
     });
   }
   /**
@@ -1522,12 +1523,12 @@ var SteamCardCompact = class extends i4 {
    * on a row of its own. The play time is left out of the heights, as it may go under its game by design. Then every
    * row, so the list keeps one layout. The list is held to its drawn height meanwhile, its overflow clipped, so nothing
    * around it moves. Held, the card keeps its container query instead, as its texts are cut short on one line and can't
-   * tell whether they fit.
+   * tell whether they fit. Returns false when the layout changed.
    */
   measureRows() {
     const list = this.renderRoot.querySelector("ha-card > .list");
     const players = list ? [...list.querySelectorAll(":scope > .user-row > .player")] : [];
-    if (!list?.clientWidth || this.heightStyle() || !players.length) return;
+    if (!list?.clientWidth || this.heightStyle() || !players.length) return true;
     const heights = () => {
       list.classList.add("timeless");
       const found = players.map(
@@ -1559,7 +1560,9 @@ var SteamCardCompact = class extends i4 {
     list.style.height = "";
     list.style.overflow = "";
     list.style.overflowAnchor = "";
-    if (oneARow !== this.oneARow) this.oneARow = oneARow;
+    if (oneARow === this.oneARow) return true;
+    this.oneARow = oneARow;
+    return false;
   }
   /**
    * On automatic rows in a sections view, the card takes the whole rows its content needs, or the half rows with
@@ -1854,6 +1857,8 @@ var SteamCardCompact = class extends i4 {
 
                 /* A column, so that with a height of its own the header stays put and the list scrolls. */
                 ha-card {
+                    /* ha-card's own transition covers every property, so a change in the rows filled would animate. */
+                    transition: none;
                     box-sizing: border-box;
                     display: flex;
                     flex-direction: column;

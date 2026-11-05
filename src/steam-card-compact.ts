@@ -167,8 +167,11 @@ export class SteamCardCompact extends LitElement {
     private fillRowsSoon(): void {
         cancelAnimationFrame(this.frame ?? 0);
         this.frame = requestAnimationFrame(() => {
-            this.measureRows();
-            this.fillRows();
+            // A layout that changes is drawn on the next render, which measures again. Rows filled to the one still drawn
+            // would hold the card at a wrong height for a frame.
+            if (this.measureRows()) {
+                this.fillRows();
+            }
         });
     }
 
@@ -178,12 +181,12 @@ export class SteamCardCompact extends LitElement {
      * on a row of its own. The play time is left out of the heights, as it may go under its game by design. Then every
      * row, so the list keeps one layout. The list is held to its drawn height meanwhile, its overflow clipped, so nothing
      * around it moves. Held, the card keeps its container query instead, as its texts are cut short on one line and can't
-     * tell whether they fit.
+     * tell whether they fit. Returns false when the layout changed.
      */
-    private measureRows(): void {
+    private measureRows(): boolean {
         const list = this.renderRoot.querySelector<HTMLElement>("ha-card > .list");
         const players = list ? [...list.querySelectorAll<HTMLElement>(":scope > .user-row > .player")] : [];
-        if (!list?.clientWidth || this.heightStyle() || !players.length) return;
+        if (!list?.clientWidth || this.heightStyle() || !players.length) return true;
         // A player is as tall as its avatar or its texts, whichever is taller, as a row stretches the shorter one
         const heights = (): number[] => {
             list.classList.add("timeless");
@@ -218,7 +221,9 @@ export class SteamCardCompact extends LitElement {
         list.style.height = "";
         list.style.overflow = "";
         list.style.overflowAnchor = "";
-        if (oneARow !== this.oneARow) this.oneARow = oneARow;
+        if (oneARow === this.oneARow) return true;
+        this.oneARow = oneARow;
+        return false;
     }
 
     /**
@@ -570,6 +575,8 @@ export class SteamCardCompact extends LitElement {
 
                 /* A column, so that with a height of its own the header stays put and the list scrolls. */
                 ha-card {
+                    /* ha-card's own transition covers every property, so a change in the rows filled would animate. */
+                    transition: none;
                     box-sizing: border-box;
                     display: flex;
                     flex-direction: column;
