@@ -29,11 +29,35 @@ export function validRowStep(config: RowStepConfig): boolean {
 const step = (config: RowStepConfig) => (config.row_step === "half" ? ROW_PX / 2 : ROW_PX);
 
 /**
+ * Room for floating-point noise in a measure unscaled from a drawn one, so a content of whole pixels counts as those
+ * pixels. Smaller than the 1/64 px a browser lays out in.
+ */
+const SLACK_PX = 0.01;
+
+/**
+ * How much a card is drawn scaled, 1 unless something scales it, such as a dialog's opening animation (0.8 to 1). Drawn
+ * sizes are scaled while the card's padding and margins are not, so a drawn measure is divided by it before they are
+ * added. A scale doesn't resize the card, so no ResizeObserver would correct a measure made mid-scale. Its computed
+ * width is its border box's, as Home Assistant's `ha-card` is `box-sizing: border-box` (checked on 2026-11-05).
+ */
+export function drawnScale(card: HTMLElement): number {
+    const layout = Number.parseFloat(getComputedStyle(card).width) || 0;
+    const drawn = card.getBoundingClientRect().width;
+    return layout > 0 && drawn > 0 ? drawn / layout : 1;
+}
+
+/**
  * The height that ends `content` pixels on the card's step: at the next whole row, or with half rows the next half, and
- * never over `limit`, which `fillLimit` gives on the step.
+ * never over `limit`, which `fillLimit` gives on the step. A content a fraction over a step, such as 120.4, takes the
+ * next one, so it isn't rounded before it comes here.
  */
 export function filledHeight(content: number, config: RowStepConfig, limit = Infinity): number {
-    return Math.min(Math.max(1, Math.ceil((content + ROW_GAP_PX) / step(config))) * step(config) - ROW_GAP_PX, limit);
+    return Math.min(Math.max(1, Math.ceil((content - SLACK_PX + ROW_GAP_PX) / step(config))) * step(config) - ROW_GAP_PX, limit);
+}
+
+/** The whole pixels the `filled` height leaves over `content`, to be given as spare room. */
+export function spareRoom(filled: number, content: number): number {
+    return Math.max(0, Math.floor(filled - content + SLACK_PX));
 }
 
 /**

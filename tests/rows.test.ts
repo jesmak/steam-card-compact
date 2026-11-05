@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { fillLimit, filledHeight, filledStyle, rowStepData, rowStepSchema, tidyRowStep, validRowStep } from "../src/rows";
+import {
+    drawnScale,
+    fillLimit,
+    filledHeight,
+    filledStyle,
+    rowStepData,
+    rowStepSchema,
+    spareRoom,
+    tidyRowStep,
+    validRowStep,
+} from "../src/rows";
 import type { RowStepConfig } from "../src/rows";
 
 describe("the card's row step", () => {
@@ -13,6 +23,8 @@ describe("the card's row step", () => {
         ["nothing, still one step", 0, {}, 56],
         ["nothing with half rows, still one half", 0, { row_step: "half" as const }, 24],
         ["an empty step, as whole rows", 88, { row_step: null }, 120],
+        ["a fraction over a row, up to the next whole one", 120.4, {}, 184],
+        ["a row with the noise of unscaling, as the row", 120.005, {}, 120],
     ])("rounds %s", (_name, content, config, filled) => {
         expect(filledHeight(content, config)).toBe(filled);
     });
@@ -21,6 +33,28 @@ describe("the card's row step", () => {
         expect(filledHeight(121, {}, 376)).toBe(184);
         expect(filledHeight(380, {}, 376)).toBe(376);
         expect(filledHeight(900, { row_step: "half" }, 376)).toBe(376);
+    });
+
+    it("leaves over the whole pixels past the content, the noise of unscaling left out, and never less than none", () => {
+        expect(spareRoom(184, 120)).toBe(64);
+        expect(spareRoom(184, 120.4)).toBe(63);
+        expect(spareRoom(120, 119.995)).toBe(0);
+        expect(spareRoom(120, 120.005)).toBe(0);
+        expect(spareRoom(120, 130)).toBe(0);
+    });
+
+    it("tells the card's drawn scale from its drawn width over its laid-out width, and 1 when either is none", () => {
+        const card = document.createElement("div");
+        card.style.width = "400px";
+        document.body.append(card);
+        card.getBoundingClientRect = () => ({ width: 360 }) as DOMRect;
+        expect(drawnScale(card)).toBeCloseTo(0.9);
+        card.getBoundingClientRect = () => ({ width: 0 }) as DOMRect;
+        expect(drawnScale(card)).toBe(1);
+        card.style.width = "0px";
+        card.getBoundingClientRect = () => ({ width: 360 }) as DOMRect;
+        expect(drawnScale(card)).toBe(1);
+        card.remove();
     });
 
     it.each<[string, RowStepConfig, string | undefined, number, number]>([

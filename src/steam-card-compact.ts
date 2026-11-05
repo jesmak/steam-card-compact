@@ -32,7 +32,7 @@ import type { HassEntity, HomeAssistant } from "./hass";
 import { gridMinRows, heightCardSize, heightStyle, validHeight } from "./height";
 import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
-import { fillLimit, filledHeight, filledStyle, validRowStep } from "./rows";
+import { drawnScale, fillLimit, filledHeight, filledStyle, spareRoom, validRowStep } from "./rows";
 import type { SteamCardCompactConfig } from "./types";
 
 console.info(
@@ -242,6 +242,8 @@ export class SteamCardCompact extends LitElement {
             if (this.spare) this.spare = 0;
             return;
         }
+        // Drawn sizes are unscaled, as the paddings and borders added to them are the layout's.
+        const scale = drawnScale(card);
         const style = getComputedStyle(card);
         const borders = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
         let content: number;
@@ -250,7 +252,7 @@ export class SteamCardCompact extends LitElement {
         if (player) {
             const own = getComputedStyle(player);
             const inner = [...player.querySelectorAll<HTMLElement>(":scope > .avatar-wrap, :scope > .details")].map(
-                (part) => part.getBoundingClientRect().height,
+                (part) => part.getBoundingClientRect().height / scale,
             );
             content = borders + (parseFloat(own.paddingTop) || 0) + Math.max(0, ...inner) + (parseFloat(own.paddingBottom) || 0);
         } else {
@@ -260,14 +262,13 @@ export class SteamCardCompact extends LitElement {
             if (!last) return;
             const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
             content =
-                last.getBoundingClientRect()[last === list ? "top" : "bottom"] -
-                card.getBoundingClientRect().top +
+                (last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top) / scale +
                 (parseFloat(style.paddingBottom) || 0) +
                 (parseFloat(style.borderBottomWidth) || 0) -
                 shown;
         }
-        const filled = filledHeight(Math.round(content), this.config ?? {}, limit);
-        const spare = header ? Math.max(0, Math.floor(filled - content)) : 0;
+        const filled = filledHeight(content, this.config ?? {}, limit);
+        const spare = header ? spareRoom(filled, content) : 0;
         if (filled !== this.filled) this.filled = filled;
         if (spare !== this.spare) this.spare = spare;
     }

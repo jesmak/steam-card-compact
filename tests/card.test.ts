@@ -535,33 +535,36 @@ describe("the configuration", () => {
 });
 
 describe("filling the rows of a sections view", () => {
-    type Layout = { end?: number; spare?: number; empty?: boolean; details?: number; padding?: number };
+    type Layout = { end?: number; spare?: number; empty?: boolean; details?: number; padding?: number; scale?: number };
 
     /**
      * Lays the card out as a browser would, as happy-dom lays nothing out: 500 px wide with its top at 0, `padding` under
      * its content and a 1 px border. The list's last row ends at `end`, or an empty list starts there, with `spare` drawn
      * under the title. The big card's player has 10 and 12 px of padding around its 64 px avatar and its texts,
-     * `details` tall.
+     * `details` tall. Its drawn sizes are drawn at `scale`, as a dialog opening draws the card.
      */
-    function laidOut(element: SteamCardCompact, { end = 0, spare = 0, empty = false, details = 50, padding = 16 }: Layout): void {
+    function laidOut(
+        element: SteamCardCompact,
+        { end = 0, spare = 0, empty = false, details = 50, padding = 16, scale = 1 }: Layout,
+    ): void {
         const root = shadow(element);
         const haCard = root.querySelector<HTMLElement>("ha-card")!;
         Object.defineProperty(haCard, "clientWidth", { value: 500, configurable: true });
-        haCard.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+        haCard.getBoundingClientRect = () => ({ top: 0, width: 500 * scale }) as DOMRect;
         const list = root.querySelector<HTMLElement>(".list");
         if (list && empty) {
-            list.getBoundingClientRect = () => ({ top: end, bottom: 900 }) as DOMRect;
+            list.getBoundingClientRect = () => ({ top: end * scale, bottom: 900 }) as DOMRect;
         } else if (list) {
-            list.lastElementChild!.getBoundingClientRect = () => ({ bottom: end }) as DOMRect;
+            list.lastElementChild!.getBoundingClientRect = () => ({ bottom: end * scale }) as DOMRect;
         } else if (!root.querySelector(".player.big")) {
-            haCard.lastElementChild!.getBoundingClientRect = () => ({ bottom: end }) as DOMRect;
+            haCard.lastElementChild!.getBoundingClientRect = () => ({ bottom: end * scale }) as DOMRect;
         }
         const avatar = root.querySelector<HTMLElement>(".big > .avatar-wrap");
-        if (avatar) avatar.getBoundingClientRect = () => ({ height: 64 }) as DOMRect;
+        if (avatar) avatar.getBoundingClientRect = () => ({ height: 64 * scale }) as DOMRect;
         const texts = root.querySelector<HTMLElement>(".big > .details");
-        if (texts) texts.getBoundingClientRect = () => ({ height: details }) as DOMRect;
+        if (texts) texts.getBoundingClientRect = () => ({ height: details * scale }) as DOMRect;
         const styles = new Map<Element | null, Record<string, string>>([
-            [haCard, { paddingBottom: `${padding}px`, borderTopWidth: "1px", borderBottomWidth: "1px" }],
+            [haCard, { width: "500px", paddingBottom: `${padding}px`, borderTopWidth: "1px", borderBottomWidth: "1px" }],
             [root.querySelector(".card-header"), { paddingBottom: `${8 + spare}px` }],
             [root.querySelector(".player.big"), { paddingTop: "10px", paddingBottom: "12px" }],
         ]);
@@ -581,9 +584,12 @@ describe("filling the rows of a sections view", () => {
         ["a list already on a whole row", list, "grid", { end: 103 }, filled(120, 0)],
         ["a list over a whole row", list, "grid", { end: 107 }, filled(184, 60)],
         ["a list over a whole row, on half rows", { ...list, row_step: "half" }, "grid", { end: 107 }, filled(152, 28)],
+        ["a list a fraction of a pixel over a whole row", list, "grid", { end: 103.4 }, filled(184, 63)],
+        ["a list drawn scaled, in the layout's pixels", list, "grid", { end: 199, scale: 0.8 }, filled(248, 32)],
         ["a list with the room under its title already drawn", list, "grid", { end: 167, spare: 60 }, filled(184, 60)],
         ["an empty list, measured to its top", { entity: [] }, "grid", { end: 50, empty: true }, filled(120, 53)],
         ["the big card", one, "grid", {}, filled(120, 0)],
+        ["the big card drawn scaled, in the layout's pixels", one, "grid", { details: 100, scale: 0.8 }, filled(184, 0)],
         ["the big card on half rows, one and a half rows", { ...one, row_step: "half" }, "grid", {}, filled(88, 0)],
         ["the big card with taller texts, on half rows", { ...one, row_step: "half" }, "grid", { details: 70 }, filled(120, 0)],
         ["the big card whose border puts it over a half row", { ...one, row_step: "half" }, "grid", { details: 66 }, filled(120, 0)],

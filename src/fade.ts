@@ -1,7 +1,9 @@
 /**
  * A fade at the edge of a part that scrolls, where its content runs on past that edge: at the bottom while there is
  * more below, at the top once it has been scrolled down. A part whose content fits shows no fade. The fade is 24 px, but
- * never more than a quarter of the part, so a card held to its minimum still shows the row it is held to show.
+ * never more than a quarter of the part, so a card held to its minimum still shows the row it is held to show. The file
+ * is copied as it is between the cards, so it describes uses a card may not have, such as a sticky header's
+ * `--fade-top-offset`.
  */
 import { css } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
@@ -53,9 +55,9 @@ const onScroll = (event: Event) => markFade(event.currentTarget as HTMLElement);
 
 /**
  * Follows a card's scrolling parts, given by `parts`, after every render and while they scroll, resize or their content
- * changes size without a render (a fold sliding open). The card's `parts` gives none while the card isn't held to a
- * height, so nothing fades then. Coming back to the page, the card's parts are followed again without waiting for a
- * render, and leaving it lets them go.
+ * changes size without a render (a fold sliding open). A card's `parts` may give none, such as while the card isn't held
+ * to a height, and nothing fades then. Coming back to the page, the card's parts are followed again without waiting for
+ * a render, and leaving it lets them go.
  */
 export class ScrollFade implements ReactiveController {
     /** Each followed part with the children whose size it watches. */

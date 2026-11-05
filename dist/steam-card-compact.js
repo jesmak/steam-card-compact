@@ -1,4 +1,4 @@
-/*! steam-card-compact 2.2.0 | MIT License */
+/*! steam-card-compact 2.2.1 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -709,7 +709,7 @@ var GestureDetector = class {
 };
 
 // src/const.ts
-var CARD_VERSION = "2.2.0";
+var CARD_VERSION = "2.2.1";
 var STATUSES = [
   "ingame",
   "online",
@@ -765,8 +765,17 @@ function validRowStep(config) {
   return config.row_step === void 0 || config.row_step === null || ROW_STEPS.includes(config.row_step);
 }
 var step = (config) => config.row_step === "half" ? ROW_PX / 2 : ROW_PX;
+var SLACK_PX = 0.01;
+function drawnScale(card) {
+  const layout = Number.parseFloat(getComputedStyle(card).width) || 0;
+  const drawn = card.getBoundingClientRect().width;
+  return layout > 0 && drawn > 0 ? drawn / layout : 1;
+}
 function filledHeight(content, config, limit = Infinity) {
-  return Math.min(Math.max(1, Math.ceil((content + ROW_GAP_PX) / step(config))) * step(config) - ROW_GAP_PX, limit);
+  return Math.min(Math.max(1, Math.ceil((content - SLACK_PX + ROW_GAP_PX) / step(config))) * step(config) - ROW_GAP_PX, limit);
+}
+function spareRoom(filled, content) {
+  return Math.max(0, Math.floor(filled - content + SLACK_PX));
 }
 function fillLimit(config, layout, minimum = 0) {
   const rows = config.grid_options ? config.grid_options.rows : config.layout_options?.grid_rows;
@@ -1437,7 +1446,7 @@ registry.customCards.push({
   preview: true
 });
 var HEADER_GAP_PX = 8;
-var SLACK_PX = 0.01;
+var SLACK_PX2 = 0.01;
 function px(value) {
   return Number.parseFloat(value ?? "") || 0;
 }
@@ -1556,7 +1565,7 @@ var SteamCardCompact = class extends i4 {
     list.classList.remove("measuring");
     list.classList.add("one-a-row");
     const alone = heights();
-    const oneARow = players.some((_2, i6) => words[i6] > rooms[i6] + SLACK_PX || paired[i6] > alone[i6] + SLACK_PX);
+    const oneARow = players.some((_2, i6) => words[i6] > rooms[i6] + SLACK_PX2 || paired[i6] > alone[i6] + SLACK_PX2);
     list.classList.toggle("one-a-row", was);
     list.style.height = "";
     list.style.overflow = "";
@@ -1581,6 +1590,7 @@ var SteamCardCompact = class extends i4 {
       if (this.spare) this.spare = 0;
       return;
     }
+    const scale = drawnScale(card);
     const style = getComputedStyle(card);
     const borders = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
     let content;
@@ -1589,7 +1599,7 @@ var SteamCardCompact = class extends i4 {
     if (player) {
       const own = getComputedStyle(player);
       const inner = [...player.querySelectorAll(":scope > .avatar-wrap, :scope > .details")].map(
-        (part) => part.getBoundingClientRect().height
+        (part) => part.getBoundingClientRect().height / scale
       );
       content = borders + (parseFloat(own.paddingTop) || 0) + Math.max(0, ...inner) + (parseFloat(own.paddingBottom) || 0);
     } else {
@@ -1597,10 +1607,10 @@ var SteamCardCompact = class extends i4 {
       const last = list?.lastElementChild ?? list ?? card.lastElementChild;
       if (!last) return;
       const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
-      content = last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) - shown;
+      content = (last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top) / scale + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) - shown;
     }
-    const filled = filledHeight(Math.round(content), this.config ?? {}, limit);
-    const spare = header ? Math.max(0, Math.floor(filled - content)) : 0;
+    const filled = filledHeight(content, this.config ?? {}, limit);
+    const spare = header ? spareRoom(filled, content) : 0;
     if (filled !== this.filled) this.filled = filled;
     if (spare !== this.spare) this.spare = spare;
   }
