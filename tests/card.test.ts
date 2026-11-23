@@ -419,14 +419,21 @@ describe("the layout", () => {
         expect([...list.classList].filter((name) => name.startsWith("fade"))).toEqual(["fades", "fade-bottom"]);
     });
 
-    it.each([
-        ["the list, never lower than its title and one row of players", { entity: ["sensor.steam_abc", "sensor.steam_def"] }, 3, 156],
-        ["the big card, never lower than its player", { entity: "sensor.steam_abc" }, 2, 88],
-    ])("holds %s", async (_name, config, rows, minimum) => {
+    it("holds the list, never lower than its title and one row of players", async () => {
         const state = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
-        const element = await card(state, { ...config, height_mode: "fixed", height: 50 });
-        expect(element.getGridOptions().min_rows).toBe(rows);
-        expect(shadow(element).querySelector("ha-card")?.getAttribute("style")).toBe(`height: ${minimum}px`);
+        const element = await card(state, { entity: ["sensor.steam_abc", "sensor.steam_def"], height_mode: "fixed", height: 50 });
+        expect(element.getGridOptions().min_rows).toBe(3);
+        expect(element.getGridOptions().max_rows).toBeUndefined();
+        expect(shadow(element).querySelector("ha-card")?.getAttribute("style")).toBe("height: 156px");
+    });
+
+    it("keeps the big card at its own size, whatever height or rows it is given", async () => {
+        const state = hass(player("sensor.steam_abc"));
+        const element = await card(state, { entity: "sensor.steam_abc", height_mode: "fixed", height: 400 });
+        expect(element.getGridOptions()).toMatchObject({ min_rows: 2, max_rows: 2 });
+        expect(shadow(element).querySelector("ha-card")?.getAttribute("style") ?? "").toBe("");
+        const rows = await card(state, { entity: "sensor.steam_abc", grid_options: { rows: 5 } } as never, "grid");
+        expect(shadow(rows).querySelector("ha-card")?.classList.contains("held")).toBe(false);
     });
 
     it("puts the title before the list, which holds the status headings and the rows of players", async () => {
@@ -571,7 +578,8 @@ describe("filling the rows of a sections view", () => {
         vi.spyOn(window, "getComputedStyle").mockImplementation((target) => (styles.get(target) ?? {}) as unknown as CSSStyleDeclaration);
     }
 
-    const filled = (height: number, spare: number) => `min-height: ${height}px; --steam-spare: ${spare}px`;
+    const filled = (height: number, spare: number) =>
+        spare ? `min-height: ${height}px; --steam-spare: ${spare}px` : `min-height: ${height}px`;
     const two = hass(player("sensor.steam_abc"), player("sensor.steam_def"));
     const list = { entity: ["sensor.steam_abc", "sensor.steam_def"] };
     const one = { entity: "sensor.steam_abc" };
@@ -632,15 +640,13 @@ describe("filling the rows of a sections view", () => {
 describe("held to a height", () => {
     const game = "Warhammer 40,000: Space Marine 2 – Ultra Edition";
 
-    it.each<[string, Partial<SteamCardCompactConfig>]>([
-        ["the big card", { entity: "sensor.steam_abc" }],
-        ["the list", { entity: ["sensor.steam_abc"], layout: "list" }],
-    ])("marks %s as held only while it is held", async (_name, config) => {
+    it("marks the list as held only while it is held, and the big card never", async () => {
         const state = device("abc", game, { since: "2026-09-16T10:00:00Z" });
-        const root = shadow(await card(state, { ...config, height_mode: "fixed", height: 200 }));
-        expect(root.querySelector("ha-card")?.classList.contains("held")).toBe(true);
-        const auto = shadow(await card(state, config));
-        expect(auto.querySelector("ha-card")?.classList.contains("held")).toBe(false);
+        const list = { entity: ["sensor.steam_abc"], layout: "list" } as Partial<SteamCardCompactConfig>;
+        const held = (root: ShadowRoot) => root.querySelector("ha-card")?.classList.contains("held");
+        expect(held(shadow(await card(state, { ...list, height_mode: "fixed", height: 200 })))).toBe(true);
+        expect(held(shadow(await card(state, list)))).toBe(false);
+        expect(held(shadow(await card(state, { entity: "sensor.steam_abc", height_mode: "fixed", height: 200 })))).toBe(false);
     });
 
     // Every text that a held card cuts short carries its whole as a tooltip, held or not

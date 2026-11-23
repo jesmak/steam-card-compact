@@ -32,7 +32,7 @@ import type { HassEntity, HomeAssistant } from "./hass";
 import { gridMinRows, heightCardSize, heightStyle, validHeight } from "./height";
 import { browserLanguage, languageOf, translate } from "./localize/localize";
 import { STEAM_LOGO } from "./logo";
-import { drawnScale, fillLimit, filledHeight, filledStyle, spareRoom, validRowStep } from "./rows";
+import { drawnScale, fillLimit, filledHeight, filledStyle, heldSpare, spareRoom, validRowStep } from "./rows";
 import type { SteamCardCompactConfig } from "./types";
 
 console.info(
@@ -121,12 +121,33 @@ export class SteamCardCompact extends LitElement {
 
     public getCardSize(): number {
         const shown = this.wanted().length;
-        return heightCardSize(this.config ?? {}, this.single() ? 2 : 1 + Math.ceil(shown / 2), this.minimumHeight());
+        return heightCardSize(this.sizing(), this.single() ? 2 : 1 + Math.ceil(shown / 2), this.minimumHeight());
     }
 
     public getGridOptions(): Record<string, unknown> {
-        // A whole row by default: the big card's picture needs the width, and the list holds two players a row.
-        return { columns: 12, rows: "auto", min_columns: 6, min_rows: gridMinRows(this.minimumHeight()) };
+        // A whole row by default: the big card's picture needs the width, and the list holds two players a row. The big
+        // card is fixed in size, so it can't be given more rows than it needs.
+        const rows = gridMinRows(this.minimumHeight());
+        return { columns: 12, rows: "auto", min_columns: 6, min_rows: rows, ...(this.single() ? { max_rows: rows } : {}) };
+    }
+
+    /**
+     * The config the card sizes itself by. The big card is fixed in size by design, as it is meant to look the same
+     * wherever it is, so a height or rows set for it are left out and it always fits its content. Home Assistant holds
+     * its rows to its own by `max_rows` too.
+     */
+    private sizing(): SteamCardCompactConfig {
+        const config: SteamCardCompactConfig = { ...(this.config ?? ({} as SteamCardCompactConfig)) };
+        if (this.single()) {
+            delete config.height_mode;
+            delete config.height;
+            delete config.max_height;
+            if (config.grid_options) {
+                config.grid_options = { ...config.grid_options, rows: "auto" };
+            }
+            delete config.layout_options;
+        }
+        return config;
     }
 
     // The lowest the card goes when held to a height, with every text on one line as a held card has them. The big card:
@@ -232,12 +253,14 @@ export class SteamCardCompact extends LitElement {
      * content is measured by its own size, never by the
      * parts that grow to fill the card: the list's last row, and the big card's avatar and texts, which sit in the middle
      * of a player that grows. What a whole row leaves over goes under the list's title, measured out of the content
-     * again each time, and in the big card to the player, which grows to take it.
+     * again each time, and in the big card to the player, which grows to take it. A list held to a height that leaves
+     * less than a row over its content puts that room under the title too, and more under the list.
      */
     private fillRows(): void {
         const card = this.renderRoot.querySelector<HTMLElement>("ha-card");
-        const limit = fillLimit(this.config ?? {}, this.layout, this.minimumHeight());
-        if (!card || !card.clientWidth || !limit) {
+        const limit = fillLimit(this.sizing(), this.layout, this.minimumHeight());
+        const held = !limit && Boolean(this.heightStyle());
+        if (!card || !card.clientWidth || (!limit && !held)) {
             if (this.filled) this.filled = 0;
             if (this.spare) this.spare = 0;
             return;
@@ -261,20 +284,28 @@ export class SteamCardCompact extends LitElement {
             const last = list?.lastElementChild ?? list ?? card.lastElementChild;
             if (!last) return;
             const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
+            // However far a held list is scrolled.
             content =
                 (last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top) / scale +
+                (list?.scrollTop ?? 0) +
                 (parseFloat(style.paddingBottom) || 0) +
                 (parseFloat(style.borderBottomWidth) || 0) -
                 shown;
         }
-        const filled = filledHeight(content, this.config ?? {}, limit);
+        if (held) {
+            const spare = header ? heldSpare(card.getBoundingClientRect().height / scale, content) : 0;
+            if (this.filled) this.filled = 0;
+            if (spare !== this.spare) this.spare = spare;
+            return;
+        }
+        const filled = filledHeight(content, this.sizing(), limit);
         const spare = header ? spareRoom(filled, content) : 0;
         if (filled !== this.filled) this.filled = filled;
         if (spare !== this.spare) this.spare = spare;
     }
 
     private heightStyle(): string {
-        return heightStyle(this.config ?? {}, this.layout, this.minimumHeight());
+        return heightStyle(this.sizing(), this.layout, this.minimumHeight());
     }
 
     protected shouldUpdate(changed: PropertyValues): boolean {
@@ -337,8 +368,8 @@ export class SteamCardCompact extends LitElement {
 
         // Held to a height, every text keeps to one line, so the card's height doesn't follow how long a game's name is
         const held = this.heightStyle();
-        const filled = filledStyle(this.config ?? {}, this.layout, this.minimumHeight(), this.filled);
-        const style = this.filled ? `${filled}; --steam-spare: ${this.spare}px` : filled;
+        const filled = filledStyle(this.sizing(), this.layout, this.minimumHeight(), this.filled);
+        const style = this.spare ? [filled, `--steam-spare: ${this.spare}px`].filter(Boolean).join("; ") : filled;
         if (this.single()) {
             return html`<ha-card class="big-card ${held ? "held" : ""}" style=${style}>
                 ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}

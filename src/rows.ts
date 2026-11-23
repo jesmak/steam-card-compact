@@ -61,6 +61,16 @@ export function spareRoom(filled: number, content: number): number {
 }
 
 /**
+ * The spare room of a card held to a height (a fixed height, or rows set in the layout tab), given as on filled rows
+ * while it is less than a row, as filled rows never leave more. From a row up it is 0, and the room goes under the
+ * card's parts, or into a part that grows to fill the card.
+ */
+export function heldSpare(held: number, content: number): number {
+    const spare = spareRoom(held, content);
+    return spare < ROW_PX ? spare : 0;
+}
+
+/**
  * The most a card fills to on automatic rows in a sections view: no limit while it fits its content, its maximum height
  * rounded down to its step while it grows up to one, but never under the steps its `minimum` needs, and 0, no filling
  * at all, outside a sections view or when the card is held to a fixed height or to rows set in the layout tab.

@@ -777,6 +777,10 @@ function filledHeight(content, config, limit = Infinity) {
 function spareRoom(filled, content) {
   return Math.max(0, Math.floor(filled - content + SLACK_PX));
 }
+function heldSpare(held, content) {
+  const spare = spareRoom(held, content);
+  return spare < ROW_PX ? spare : 0;
+}
 function fillLimit(config, layout, minimum = 0) {
   const rows = config.grid_options ? config.grid_options.rows : config.layout_options?.grid_rows;
   if (layout !== "grid" || typeof rows === "number") {
@@ -1483,10 +1487,29 @@ var SteamCardCompact = class extends i4 {
   }
   getCardSize() {
     const shown = this.wanted().length;
-    return heightCardSize(this.config ?? {}, this.single() ? 2 : 1 + Math.ceil(shown / 2), this.minimumHeight());
+    return heightCardSize(this.sizing(), this.single() ? 2 : 1 + Math.ceil(shown / 2), this.minimumHeight());
   }
   getGridOptions() {
-    return { columns: 12, rows: "auto", min_columns: 6, min_rows: gridMinRows(this.minimumHeight()) };
+    const rows = gridMinRows(this.minimumHeight());
+    return { columns: 12, rows: "auto", min_columns: 6, min_rows: rows, ...this.single() ? { max_rows: rows } : {} };
+  }
+  /**
+   * The config the card sizes itself by. The big card is fixed in size by design, as it is meant to look the same
+   * wherever it is, so a height or rows set for it are left out and it always fits its content. Home Assistant holds
+   * its rows to its own by `max_rows` too.
+   */
+  sizing() {
+    const config = { ...this.config ?? {} };
+    if (this.single()) {
+      delete config.height_mode;
+      delete config.height;
+      delete config.max_height;
+      if (config.grid_options) {
+        config.grid_options = { ...config.grid_options, rows: "auto" };
+      }
+      delete config.layout_options;
+    }
+    return config;
   }
   // The lowest the card goes when held to a height, with every text on one line as a held card has them. The big card:
   // its border and its player, the 64 px avatar with its padding, one and a half rows, as nothing in it scrolls. The
@@ -1580,12 +1603,14 @@ var SteamCardCompact = class extends i4 {
    * content is measured by its own size, never by the
    * parts that grow to fill the card: the list's last row, and the big card's avatar and texts, which sit in the middle
    * of a player that grows. What a whole row leaves over goes under the list's title, measured out of the content
-   * again each time, and in the big card to the player, which grows to take it.
+   * again each time, and in the big card to the player, which grows to take it. A list held to a height that leaves
+   * less than a row over its content puts that room under the title too, and more under the list.
    */
   fillRows() {
     const card = this.renderRoot.querySelector("ha-card");
-    const limit = fillLimit(this.config ?? {}, this.layout, this.minimumHeight());
-    if (!card || !card.clientWidth || !limit) {
+    const limit = fillLimit(this.sizing(), this.layout, this.minimumHeight());
+    const held = !limit && Boolean(this.heightStyle());
+    if (!card || !card.clientWidth || !limit && !held) {
       if (this.filled) this.filled = 0;
       if (this.spare) this.spare = 0;
       return;
@@ -1607,15 +1632,21 @@ var SteamCardCompact = class extends i4 {
       const last = list?.lastElementChild ?? list ?? card.lastElementChild;
       if (!last) return;
       const shown = header ? Math.max(0, (parseFloat(getComputedStyle(header).paddingBottom) || 0) - HEADER_GAP_PX) : 0;
-      content = (last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top) / scale + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) - shown;
+      content = (last.getBoundingClientRect()[last === list ? "top" : "bottom"] - card.getBoundingClientRect().top) / scale + (list?.scrollTop ?? 0) + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0) - shown;
     }
-    const filled = filledHeight(content, this.config ?? {}, limit);
+    if (held) {
+      const spare2 = header ? heldSpare(card.getBoundingClientRect().height / scale, content) : 0;
+      if (this.filled) this.filled = 0;
+      if (spare2 !== this.spare) this.spare = spare2;
+      return;
+    }
+    const filled = filledHeight(content, this.sizing(), limit);
     const spare = header ? spareRoom(filled, content) : 0;
     if (filled !== this.filled) this.filled = filled;
     if (spare !== this.spare) this.spare = spare;
   }
   heightStyle() {
-    return heightStyle(this.config ?? {}, this.layout, this.minimumHeight());
+    return heightStyle(this.sizing(), this.layout, this.minimumHeight());
   }
   shouldUpdate(changed) {
     if (!changed.has("hass") || changed.size > 1 || !this.config) {
@@ -1666,8 +1697,8 @@ var SteamCardCompact = class extends i4 {
     const players = wanted.map((id) => hass.states[id]).filter((entity) => entity !== void 0).map((entity) => readPlayer(hass, entity));
     const missing = wanted.filter((id) => hass.states[id] === void 0);
     const held = this.heightStyle();
-    const filled = filledStyle(this.config ?? {}, this.layout, this.minimumHeight(), this.filled);
-    const style = this.filled ? `${filled}; --steam-spare: ${this.spare}px` : filled;
+    const filled = filledStyle(this.sizing(), this.layout, this.minimumHeight(), this.filled);
+    const style = this.spare ? [filled, `--steam-spare: ${this.spare}px`].filter(Boolean).join("; ") : filled;
     if (this.single()) {
       return b2`<ha-card class="big-card ${held ? "held" : ""}" style=${style}>
                 ${players.length > 0 ? this.bigCard(players[0]) : this.notFound(missing[0])}

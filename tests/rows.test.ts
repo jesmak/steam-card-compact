@@ -5,6 +5,7 @@ import {
     fillLimit,
     filledHeight,
     filledStyle,
+    heldSpare,
     rowStepData,
     rowStepSchema,
     spareRoom,
@@ -41,6 +42,14 @@ describe("the card's row step", () => {
         expect(spareRoom(120, 119.995)).toBe(0);
         expect(spareRoom(120, 120.005)).toBe(0);
         expect(spareRoom(120, 130)).toBe(0);
+    });
+
+    it("spreads a held card's room only while it is less than a row", () => {
+        expect(heldSpare(300, 260)).toBe(40);
+        expect(heldSpare(300, 236.5)).toBe(63);
+        expect(heldSpare(300, 236)).toBe(0);
+        expect(heldSpare(300, 120)).toBe(0);
+        expect(heldSpare(300, 320)).toBe(0);
     });
 
     it("tells the card's drawn scale from its drawn width over its laid-out width, and 1 when either is none", () => {
