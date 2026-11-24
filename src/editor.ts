@@ -1,12 +1,15 @@
 /**
  * The card's visual editor: the players, the layout, the title, the game picture, how the card rounds its height to the
- * rows of a sections view (its height mode is set in YAML only), the names to
- * show instead of the players' own, and what a tap, a hold and a double tap do. Home Assistant provides ha-form and the selectors.
+ * rows of a sections view (its height mode is set in YAML only), how the list shows that there is more when it scrolls,
+ * the names to show instead of the players' own, and what a tap, a hold and a double tap do. Home Assistant provides
+ * ha-form and the selectors.
  */
 import { LitElement, html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
+import { DEFAULT_SCROLL_INDICATOR } from "./const";
+import { scrollIndicatorData, scrollIndicatorSchema, tidyScrollIndicator } from "./fade";
 import type { HomeAssistant } from "./hass";
 import { rowStepData, rowStepSchema, tidyRowStep } from "./rows";
 import { steamPlayers } from "./friends";
@@ -51,6 +54,7 @@ function schema(hass: HomeAssistant, config: SteamCardCompactConfig, text: (key:
         { name: "title", selector: { text: {} } },
         { name: "game_background", selector: { boolean: {} } },
         ...rowStepSchema(config, text),
+        ...scrollIndicatorSchema(text),
         {
             name: "name_overrides",
             selector: {
@@ -100,7 +104,7 @@ export class SteamCardCompactEditor extends LitElement {
         return html`
             <ha-form
                 .hass=${this.hass}
-                .data=${rowStepData({ ...DEFAULTS, ...this.config, entity })}
+                .data=${scrollIndicatorData(rowStepData({ ...DEFAULTS, ...this.config, entity }), DEFAULT_SCROLL_INDICATOR)}
                 .schema=${schema(this.hass, this.config, (key) => this.text(key))}
                 .computeLabel=${(entry: SchemaEntry) => this.text(`editor.${entry.name}`)}
                 .computeHelper=${(entry: SchemaEntry) => this.helper(entry.name)}
@@ -110,7 +114,7 @@ export class SteamCardCompactEditor extends LitElement {
     }
 
     private valueChanged(event: CustomEvent<{ value: SteamCardCompactConfig }>): void {
-        const config: SteamCardCompactConfig = tidyRowStep(event.detail.value);
+        const config: SteamCardCompactConfig = tidyScrollIndicator(tidyRowStep(event.detail.value), DEFAULT_SCROLL_INDICATOR);
 
         // One player is kept as a string, as it always was, for the big card. A configuration that was a list stays
         // one, so a list of one player isn't turned into the big card by an edit of something else.

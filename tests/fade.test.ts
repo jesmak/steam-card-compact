@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactiveController } from "lit";
 
-import { ScrollFade, markFade } from "../src/fade";
+import { ScrollFade, markFade, scrollIndicator, scrollIndicatorData, tidyScrollIndicator, validScrollIndicator } from "../src/fade";
+import type { ScrollIndicator, ScrollIndicatorConfig } from "../src/fade";
+
+const both = (): ScrollIndicator => "both";
 
 /** A part with the sizes a browser would lay out, which happy-dom doesn't. */
 function part(content: number, height: number, scrolled = 0): HTMLElement {
@@ -87,7 +90,7 @@ describe("following a card's scrolling parts", () => {
     it("marks the parts after each render and follows them as they scroll", () => {
         const card = host();
         const first = part(500, 200);
-        new ScrollFade(card.element, () => [first]);
+        new ScrollFade(card.element, () => [first], both);
         card.rendered();
         expect(fades(first)).toEqual(["fade-bottom"]);
         expect(first.classList.contains("fades")).toBe(true);
@@ -101,7 +104,7 @@ describe("following a card's scrolling parts", () => {
         const card = host();
         const first = part(500, 200);
         let given = [first];
-        new ScrollFade(card.element, () => given);
+        new ScrollFade(card.element, () => given, both);
         card.rendered();
         given = [];
         card.rendered();
@@ -116,7 +119,7 @@ describe("following a card's scrolling parts", () => {
     it("lets go when the card leaves the page, and follows again when it comes back, with no render between", () => {
         const card = host();
         const first = part(500, 200);
-        new ScrollFade(card.element, () => [first]);
+        new ScrollFade(card.element, () => [first], both);
         card.rendered();
         card.left();
         expect(fades(first)).toEqual([]);
@@ -131,7 +134,7 @@ describe("following a card's scrolling parts", () => {
     it("doesn't follow again when the card renders after leaving the page", () => {
         const card = host();
         const first = part(500, 200);
-        new ScrollFade(card.element, () => [first]);
+        new ScrollFade(card.element, () => [first], both);
         card.rendered();
         card.left();
         card.rendered();
@@ -142,7 +145,7 @@ describe("following a card's scrolling parts", () => {
     it("keeps its class on a part whose class attribute a render writes again", () => {
         const card = host();
         const first = part(500, 200);
-        new ScrollFade(card.element, () => [first]);
+        new ScrollFade(card.element, () => [first], both);
         card.rendered();
         first.setAttribute("class", "rows with-days");
         card.rendered();
@@ -153,12 +156,56 @@ describe("following a card's scrolling parts", () => {
     it("does nothing when the card comes to the page before its first render", () => {
         const card = host();
         let asked = 0;
-        new ScrollFade(card.element, () => {
-            asked++;
-            return [];
-        });
+        new ScrollFade(
+            card.element,
+            () => {
+                asked++;
+                return [];
+            },
+            both,
+        );
         card.back();
         expect(asked).toBe(0);
+    });
+
+    it("hides the parts' scrollbar with the fade alone, and shows it again with both", () => {
+        const card = host();
+        const first = part(500, 200);
+        let indicator: ScrollIndicator = "fade";
+        new ScrollFade(
+            card.element,
+            () => [first],
+            () => indicator,
+        );
+        card.rendered();
+        expect(first.classList.contains("scroll-hidden")).toBe(true);
+        expect(fades(first)).toEqual(["fade-bottom"]);
+
+        indicator = "both";
+        card.rendered();
+        expect(first.classList.contains("scroll-hidden")).toBe(false);
+        expect(fades(first)).toEqual(["fade-bottom"]);
+    });
+
+    it("fades nothing with the scrollbar alone, and lets go of the parts it followed", () => {
+        const card = host();
+        const first = part(500, 200);
+        let indicator: ScrollIndicator = "fade";
+        new ScrollFade(
+            card.element,
+            () => [first],
+            () => indicator,
+        );
+        card.rendered();
+        indicator = "scrollbar";
+        card.rendered();
+        expect(fades(first)).toEqual([]);
+        expect(first.classList.contains("fades")).toBe(false);
+        expect(first.classList.contains("scroll-hidden")).toBe(false);
+
+        first.scrollTop = 300;
+        first.dispatchEvent(new Event("scroll"));
+        expect(fades(first)).toEqual([]);
     });
 
     describe("with a resize observer", () => {
@@ -191,7 +238,7 @@ describe("following a card's scrolling parts", () => {
             const card = host();
             const first = part(500, 200);
             const child = first.firstElementChild!;
-            new ScrollFade(card.element, () => [first]);
+            new ScrollFade(card.element, () => [first], both);
             card.rendered();
             expect(observed.has(first) && observed.has(child)).toBe(true);
             expect(fades(first)).toEqual(["fade-bottom"]);
@@ -205,7 +252,7 @@ describe("following a card's scrolling parts", () => {
             stub();
             const card = host();
             const first = part(500, 200);
-            new ScrollFade(card.element, () => [first]);
+            new ScrollFade(card.element, () => [first], both);
             card.rendered();
             Object.defineProperty(first, "clientHeight", { value: 500 });
             fire([first]);
@@ -218,7 +265,7 @@ describe("following a card's scrolling parts", () => {
             const first = part(500, 200);
             const child = first.firstElementChild!;
             let given = [first];
-            new ScrollFade(card.element, () => given);
+            new ScrollFade(card.element, () => given, both);
             card.rendered();
             given = [];
             card.rendered();
@@ -231,7 +278,7 @@ describe("following a card's scrolling parts", () => {
             const card = host();
             const first = part(500, 200);
             const old = first.firstElementChild!;
-            new ScrollFade(card.element, () => [first]);
+            new ScrollFade(card.element, () => [first], both);
             card.rendered();
             const added = document.createElement("div");
             first.replaceChildren(added);
@@ -242,5 +289,33 @@ describe("following a card's scrolling parts", () => {
             card.left();
             expect(observed.size).toBe(0);
         });
+    });
+});
+
+describe("the scroll indicator option", () => {
+    it.each<[unknown, boolean]>([
+        [undefined, true],
+        [null, true],
+        ["both", true],
+        ["fade", true],
+        ["scrollbar", true],
+        ["none", false],
+        ["Fade", false],
+        [true, false],
+    ])("takes %j as %s", (value, valid) => {
+        expect(validScrollIndicator({ scroll_indicator: value } as ScrollIndicatorConfig)).toBe(valid);
+    });
+
+    it("is the card's own default unless the configuration sets one", () => {
+        expect(scrollIndicator({}, "fade")).toBe("fade");
+        expect(scrollIndicator({ scroll_indicator: null }, "both")).toBe("both");
+        expect(scrollIndicator({ scroll_indicator: "scrollbar" }, "fade")).toBe("scrollbar");
+    });
+
+    it("shows the indicator in force in the editor, and leaves the card's default out of the configuration", () => {
+        expect(scrollIndicatorData({}, "fade")).toEqual({ scroll_indicator: "fade" });
+        expect(tidyScrollIndicator({ scroll_indicator: "fade" }, "fade")).toEqual({});
+        expect(tidyScrollIndicator({ scroll_indicator: "fade" }, "both")).toEqual({ scroll_indicator: "fade" });
+        expect(tidyScrollIndicator({ scroll_indicator: null }, "both")).toEqual({});
     });
 });

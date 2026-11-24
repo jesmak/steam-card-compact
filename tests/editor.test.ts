@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe("the visual editor", () => {
-    it("asks for the players, the layout, a title, the game picture, the height's rounding, the names and the actions, and not the height mode, which is set in YAML only", async () => {
+    it("asks for the players, the layout, a title, the game picture, the height's rounding, the scroll indicator, the names and the actions, and not the height mode, which is set in YAML only", async () => {
         const names = form(await editor()).schema.map((entry) => entry.name);
         expect(names).toEqual([
             "entity",
@@ -61,6 +61,7 @@ describe("the visual editor", () => {
             "title",
             "game_background",
             "row_step",
+            "scroll_indicator",
             "name_overrides",
             "interactions",
         ]);
@@ -126,6 +127,7 @@ describe("the visual editor", () => {
             layout: "auto",
             game_background: true,
             auto_populate: false,
+            scroll_indicator: "both",
             title: "",
             name_overrides: [],
         });
@@ -133,6 +135,13 @@ describe("the visual editor", () => {
             type: "custom:steam-card-compact",
             entity: ["sensor.steam_abc", "sensor.steam_def"],
         });
+    });
+
+    it("keeps a chosen scroll indicator in the configuration", async () => {
+        const element = await editor();
+        const changes = changesOf(element);
+        change(element, { type: "custom:steam-card-compact", entity: ["sensor.steam_abc"], scroll_indicator: "fade" });
+        expect(changes[0]).toEqual({ type: "custom:steam-card-compact", entity: ["sensor.steam_abc"], scroll_indicator: "fade" });
     });
 
     it("drops the players when every player is listed by itself", async () => {

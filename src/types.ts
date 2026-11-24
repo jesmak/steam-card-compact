@@ -1,10 +1,11 @@
+import type { ScrollIndicatorConfig } from "./fade";
 import type { ActionConfig, LovelaceCardConfig } from "./hass";
 import type { RowStepConfig } from "./rows";
 
 /** `player` is the big card of one player, `list` the list, `auto` the list unless one player is named. */
 type Layout = "auto" | "list" | "player";
 
-export interface SteamCardCompactConfig extends LovelaceCardConfig, RowStepConfig {
+export interface SteamCardCompactConfig extends LovelaceCardConfig, RowStepConfig, ScrollIndicatorConfig {
     /** One player for the big card, or several for the list. Left out when auto_populate is on. */
     entity?: string | string[];
     layout?: Layout;

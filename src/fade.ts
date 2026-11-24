@@ -1,12 +1,61 @@
 /**
  * A fade at the edge of a part that scrolls, where its content runs on past that edge: at the bottom while there is
  * more below, at the top once it has been scrolled down. A part whose content fits shows no fade. The fade is 24 px, but
- * never more than a quarter of the part, so a card held to its minimum still shows the row it is held to show. The file
- * is copied as it is between the cards, so it describes uses a card may not have, such as a sticky header's
- * `--fade-top-offset`.
+ * never more than a quarter of the part, so a card held to its minimum still shows the row it is held to show. Which of
+ * the fade and the card's own scrollbar a part shows is the card's `scroll_indicator` option, its default the card's
+ * own. The file is copied as it is between the cards, so it describes uses a card may not have, such as a sticky
+ * header's `--fade-top-offset`.
  */
 import { css } from "lit";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
+
+/** How a part that scrolls shows that there is more: by its fading edges, by the card's scrollbar, or by both. */
+export type ScrollIndicator = "both" | "fade" | "scrollbar";
+
+export const SCROLL_INDICATORS: ScrollIndicator[] = ["both", "fade", "scrollbar"];
+
+export interface ScrollIndicatorConfig {
+    scroll_indicator?: ScrollIndicator | null;
+}
+
+/** Left out, or left empty in YAML, the card's own default is used. */
+export function validScrollIndicator(config: ScrollIndicatorConfig): boolean {
+    return config.scroll_indicator === undefined || config.scroll_indicator === null || SCROLL_INDICATORS.includes(config.scroll_indicator);
+}
+
+/** The indicator in force, the card's `fallback` unless the configuration sets one. */
+export function scrollIndicator(config: ScrollIndicatorConfig, fallback: ScrollIndicator): ScrollIndicator {
+    return config.scroll_indicator ?? fallback;
+}
+
+/** The editor's field. */
+export function scrollIndicatorSchema(text: (key: string) => string): Record<string, unknown>[] {
+    return [
+        {
+            name: "scroll_indicator",
+            selector: {
+                select: {
+                    mode: "dropdown",
+                    options: SCROLL_INDICATORS.map((value) => ({ value, label: text(`editor.scroll_indicator_${value}`) })),
+                },
+            },
+        },
+    ];
+}
+
+/** The editor's data, with the indicator in force shown even when the configuration leaves it out. */
+export function scrollIndicatorData<T extends ScrollIndicatorConfig>(config: T, fallback: ScrollIndicator): T {
+    return { ...config, scroll_indicator: scrollIndicator(config, fallback) };
+}
+
+/** Drops the card's default indicator, so an edited config stays as short as one written by hand. */
+export function tidyScrollIndicator<T extends ScrollIndicatorConfig>(config: T, fallback: ScrollIndicator): T {
+    const tidied = { ...config };
+    if (scrollIndicator(tidied, fallback) === fallback) {
+        delete tidied.scroll_indicator;
+    }
+    return tidied;
+}
 
 /**
  * The fades, for the card's styles. A part with a header that stays at its top (`position: sticky`) sets
@@ -42,6 +91,15 @@ export const fadeStyles = css`
             transparent
         );
     }
+
+    /* Over the card's own scrollbar style, whatever its selector. */
+    .scroll-hidden {
+        scrollbar-width: none !important;
+    }
+
+    .scroll-hidden::-webkit-scrollbar {
+        display: none;
+    }
 `;
 
 /** Marks a part by where its content runs past its edges. A pixel to spare keeps rounding from showing a fade. */
@@ -56,8 +114,9 @@ const onScroll = (event: Event) => markFade(event.currentTarget as HTMLElement);
 /**
  * Follows a card's scrolling parts, given by `parts`, after every render and while they scroll, resize or their content
  * changes size without a render (a fold sliding open). A card's `parts` may give none, such as while the card isn't held
- * to a height, and nothing fades then. Coming back to the page, the card's parts are followed again without waiting for
- * a render, and leaving it lets them go.
+ * to a height, and nothing fades then. Nothing fades either while `indicator` gives `scrollbar`, and with `fade` the
+ * parts hide their scrollbar. Coming back to the page, the card's parts are followed again without waiting for a
+ * render, and leaving it lets them go.
  */
 export class ScrollFade implements ReactiveController {
     /** Each followed part with the children whose size it watches. */
@@ -77,6 +136,7 @@ export class ScrollFade implements ReactiveController {
     constructor(
         private readonly host: ReactiveControllerHost & HTMLElement & { hasUpdated: boolean },
         private readonly parts: () => Iterable<HTMLElement>,
+        private readonly indicator: () => ScrollIndicator,
     ) {
         host.addController(this);
     }
@@ -101,7 +161,8 @@ export class ScrollFade implements ReactiveController {
     }
 
     private follow(): void {
-        const now = new Set(this.parts());
+        const indicator = this.indicator();
+        const now = new Set(indicator === "scrollbar" ? [] : this.parts());
         for (const part of [...this.followed.keys()]) {
             if (!now.has(part)) {
                 this.forget(part);
@@ -114,6 +175,7 @@ export class ScrollFade implements ReactiveController {
             }
             // Every time, as a render that binds the part's class attribute writes the whole attribute again.
             part.classList.add("fades");
+            part.classList.toggle("scroll-hidden", indicator === "fade");
             // The children change between renders, so the ones watched are brought up to date each time.
             const before = this.followed.get(part) ?? [];
             const children = [...part.children];
@@ -129,6 +191,6 @@ export class ScrollFade implements ReactiveController {
         this.followed.delete(part);
         part.removeEventListener("scroll", onScroll);
         this.resized?.unobserve(part);
-        part.classList.remove("fades", "fade-top", "fade-bottom");
+        part.classList.remove("fades", "fade-top", "fade-bottom", "scroll-hidden");
     }
 }

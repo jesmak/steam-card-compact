@@ -10,9 +10,9 @@ import { classMap } from "lit/directives/class-map.js";
 
 import { GestureDetector, isTappable } from "./actions";
 import type { Gesture } from "./actions";
-import { CARD_VERSION, STATUSES, STORE_URL } from "./const";
+import { CARD_VERSION, DEFAULT_SCROLL_INDICATOR, STATUSES, STORE_URL } from "./const";
 import "./editor";
-import { ScrollFade, fadeStyles } from "./fade";
+import { ScrollFade, fadeStyles, scrollIndicator, validScrollIndicator } from "./fade";
 import {
     avatarUrl,
     deviceEntityIds,
@@ -93,7 +93,11 @@ export class SteamCardCompact extends LitElement {
     constructor() {
         super();
         // Fades the list's edges while the card is held to a height, through the card's own lifecycle.
-        new ScrollFade(this, () => (this.heightStyle() ? this.renderRoot.querySelectorAll<HTMLElement>(".list") : []));
+        new ScrollFade(
+            this,
+            () => (this.heightStyle() ? this.renderRoot.querySelectorAll<HTMLElement>(".list") : []),
+            () => scrollIndicator(this.config ?? {}, DEFAULT_SCROLL_INDICATOR),
+        );
     }
 
     public static getConfigElement(): HTMLElement {
@@ -115,6 +119,9 @@ export class SteamCardCompact extends LitElement {
         }
         if (!validRowStep(config)) {
             throw new Error(translate(browserLanguage(), "common.invalid_row_step"));
+        }
+        if (!validScrollIndicator(config)) {
+            throw new Error(translate(browserLanguage(), "common.invalid_scroll_indicator"));
         }
         this.config = { ...config };
     }
