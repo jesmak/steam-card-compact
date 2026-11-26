@@ -1281,8 +1281,18 @@ var LANGUAGES = Object.fromEntries(
 );
 var LANGUAGE_CODES = Object.keys(LANGUAGES).sort();
 function translate(language, key) {
-  const code = (language ?? "en").split(/[-_]/)[0].toLowerCase();
-  return read(LANGUAGES[code], key) ?? read(LANGUAGES.en, key) ?? key;
+  for (const code of languageCodes(language)) {
+    const text = read(LANGUAGES[code], key);
+    if (text !== void 0) {
+      return text;
+    }
+  }
+  return read(LANGUAGES.en, key) ?? key;
+}
+function languageCodes(language) {
+  const tag = (language ?? "en").trim().toLowerCase().replace(/_/g, "-");
+  const base = tag.split("-")[0];
+  return tag === base ? [base] : [tag, base];
 }
 function read(table, key) {
   let value = table;

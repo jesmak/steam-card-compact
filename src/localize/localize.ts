@@ -16,10 +16,25 @@ const LANGUAGES: Record<string, Record<string, unknown>> = Object.fromEntries(
 /** The languages the card has, by their code. */
 export const LANGUAGE_CODES = Object.keys(LANGUAGES).sort();
 
-/** A text in the viewer's language, falling back to English. Keys are dotted, such as `common.name`. */
+/**
+ * A text in the viewer's language, falling back to English. Keys are dotted, such as `common.name`.
+ * `pt-BR` reads `pt-br.json` first, then `pt.json`, and English last.
+ */
 export function translate(language: string | undefined, key: string): string {
-    const code = (language ?? "en").split(/[-_]/)[0].toLowerCase();
-    return read(LANGUAGES[code], key) ?? read(LANGUAGES.en, key) ?? key;
+    for (const code of languageCodes(language)) {
+        const text = read(LANGUAGES[code], key);
+        if (text !== undefined) {
+            return text;
+        }
+    }
+    return read(LANGUAGES.en, key) ?? key;
+}
+
+/** The codes to try for a language tag, the most specific first: `pt-br`, then `pt`. */
+function languageCodes(language: string | undefined): string[] {
+    const tag = (language ?? "en").trim().toLowerCase().replace(/_/g, "-");
+    const base = tag.split("-")[0];
+    return tag === base ? [base] : [tag, base];
 }
 
 function read(table: Record<string, unknown> | undefined, key: string): string | undefined {

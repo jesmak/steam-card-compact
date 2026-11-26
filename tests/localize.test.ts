@@ -41,6 +41,8 @@ describe("languages", () => {
     it("fall back to English for a text a language lacks, and to the key for one nobody has", () => {
         expect(translate("fi", "statuses.online")).toBe("Paikalla");
         expect(translate("fi-FI", "statuses.online")).toBe("Paikalla");
+        expect(translate("fi_FI", "statuses.online")).toBe("Paikalla");
+        expect(translate("xx-YY", "statuses.away")).toBe("Away");
         expect(translate("xx", "statuses.away")).toBe("Away");
         expect(translate("fi", "no.such.key")).toBe("no.such.key");
     });
