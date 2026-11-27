@@ -170,6 +170,12 @@ the file the Marketplace installs and is committed to the repository.
 | `docs/screenshots/`         | Their made-up avatars and games                                          |
 | `tests/`                    | Tests, run with vitest                                                   |
 
+## Contributing
+
+Pull requests are welcome. Open them against the `dev` branch, where the work for the next release is collected.
+`main` holds the latest release and moves only when a new one is made, so this README always describes the released
+version.
+
 ## Support
 
 Hey dude! Help me out for a couple of :beers: or a :coffee:!
