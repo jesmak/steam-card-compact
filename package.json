@@ -34,11 +34,11 @@
         "@eslint/compat": "^2.1.1",
         "@eslint/js": "^10.0.1",
         "esbuild": "^0.28.2",
-        "eslint": "^10.14.0",
+        "eslint": "^10.16.0",
         "happy-dom": "^21.0.4",
-        "prettier": "^3.9.10",
+        "prettier": "^3.10.1",
         "typescript": "~6.0.3",
-        "typescript-eslint": "^8.72.1",
-        "vitest": "^5.0.5"
+        "typescript-eslint": "^8.74.0",
+        "vitest": "^5.1.2"
     }
 }
